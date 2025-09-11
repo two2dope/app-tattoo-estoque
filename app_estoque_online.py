@@ -17,12 +17,13 @@ ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
-def carregar_componentes_visuais(num_itens_alerta=0):
+def carregar_componentes_visuais():
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
     <style>
         /* Ajustes Gerais */
+        iframe {{ display: none; }} /* Oculta o iframe de componentes HTML */
         .block-container {{ padding-top: 3rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
@@ -33,13 +34,13 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             padding: 1rem; overflow: hidden;
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
-        .sidebar-header {{ margin-bottom: 1rem; }}
+        .sidebar-header {{ text-align: center; margin-bottom: 1rem; }}
         .sidebar-menu {{ flex-grow: 1; }}
         .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
-        .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }} /* Alterado para block */
-        .footer-version {{ font-size: 0.8em; color: #666; display: block; }} /* Alterado para block */
+        .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
+        .footer-version {{ font-size: 0.8em; color: #666; display: block; }}
         
-        /* Botões do Menu da Sidebar (HTML) */
+        /* Menu da Sidebar (HTML) */
         .nav-item {{
             display: flex; align-items: center; justify-content: space-between;
             padding: 10px 15px; margin-bottom: 4px; border-radius: 8px;
@@ -48,7 +49,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
         }}
         .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
         .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; }}
-        .nav-item i {{ margin-right: 12px; font-size: 0.9em; }}
+        .nav-item .icon {{ margin-right: 12px; font-size: 0.9em; width: 20px; text-align: center;}}
 
         /* Badge de Notificação */
         .badge {{
@@ -159,7 +160,7 @@ def pagina_painel_principal():
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=lambda: set_page("Adicionar Item"), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
@@ -264,20 +265,35 @@ def set_page(page): st.session_state.pagina_atual = page
 with st.sidebar:
     st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
     
+    # Dicionário de itens do menu com seus ícones
     menu_items = {
-        "Painel Principal": "Painel Principal", "Meu Estoque": "Meu Estoque",
-        "Adicionar Item": "Adicionar Item", "Registrar Uso": "Registrar Uso",
-        "Lista de Compras": "Lista de Compras", "Gerenciar Cadastros": "Gerenciar Cadastros"
+        "Painel Principal": "fa-solid fa-chart-simple",
+        "Meu Estoque": "fa-solid fa-box-archive",
+        "Adicionar Item": "fa-solid fa-plus",
+        "Registrar Uso": "fa-solid fa-pen",
+        "Lista de Compras": "fa-solid fa-cart-shopping",
+        "Gerenciar Cadastros": "fa-solid fa-cogs"
     }
 
-    for key, value in menu_items.items():
-        st.button(value, on_click=set_page, args=(key,), key=f"btn_{key}", use_container_width=True)
+    # Gera o HTML do menu com os botões invisíveis do Streamlit
+    for page_name, icon_class in menu_items.items():
+        is_active = "active" if st.session_state.pagina_atual == page_name else ""
+        badge_html = f"<span class='badge'>{num_itens_comprar}</span>" if "Lista de Compras" in page_name and num_itens_comprar > 0 else ""
+        
+        # Renderiza o item do menu como HTML clicável
+        st.markdown(f'<a href="?page={page_name.replace(" ", "_")}" class="nav-item {is_active}" target="_self"><i class="{icon_class} icon"></i><span>{page_name}</span>{badge_html}</a>', unsafe_allow_html=True)
+    
+    # Atualiza a página com base no parâmetro da URL
+    if "page" in st.query_params and st.query_params['page'].replace("_", " ") != st.session_state.pagina_atual:
+        set_page(st.query_params['page'].replace("_", " "))
+        st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 14.1 Final</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.0 Final</span></div>', unsafe_allow_html=True)
 
 paginas = {
     "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
