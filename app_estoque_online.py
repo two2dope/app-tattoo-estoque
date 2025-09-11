@@ -236,7 +236,7 @@ def pagina_registrar_uso():
             for item in st.session_state.sessao_uso: st.markdown(f"- **{item['qtd']}x** {item['nome']}")
             if st.button("Confirmar Uso", use_container_width=True, type="primary"):
                 for item in st.session_state.sessao_uso: registrar_uso(item['id'], item['qtd'])
-                st.session_state.sessao_uso = []; st.success("Baixa de estoque confirmada com sucesso!"); st.rerun()
+                st.session_state.sessao_uso = []; st.toast('Baixa de estoque confirmada com sucesso!', icon='✅'); st.rerun()
 
 def pagina_lista_compras():
     st.markdown("<h3><i class='fa-solid fa-cart-shopping'></i> Lista de Compras</h3>", unsafe_allow_html=True); st.write("Itens que atingiram o estoque mínimo.")
