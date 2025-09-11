@@ -18,7 +18,6 @@ CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
 def carregar_componentes_visuais(num_itens_alerta=0):
-    # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
@@ -37,43 +36,24 @@ def carregar_componentes_visuais(num_itens_alerta=0):
         .sidebar-header {{ margin-bottom: 1rem; }}
         .sidebar-menu {{ flex-grow: 1; }}
         .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
-        .footer-brand {{ font-size: 0.9em; font-weight: bold; }}
-        .footer-version {{ font-size: 0.8em; color: #666; }}
+        .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }} /* Alterado para block */
+        .footer-version {{ font-size: 0.8em; color: #666; display: block; }} /* Alterado para block */
         
-        /* Botões do Menu da Sidebar (Condensado) */
-        .stButton > button {{
-            width: 100%; text-align: left !important; border: none; 
-            background-color: transparent; color: #e0e0e0; 
-            padding: 10px 15px;
-            margin-bottom: 4px;
-            font-size: 1.0em;
-            transition: all 0.2s ease-in-out; white-space: nowrap; 
-            overflow: hidden; text-overflow: ellipsis; 
+        /* Botões do Menu da Sidebar (HTML) */
+        .nav-item {{
             display: flex; align-items: center; justify-content: space-between;
-            border-radius: 8px;
+            padding: 10px 15px; margin-bottom: 4px; border-radius: 8px;
+            font-size: 1.0em; color: #e0e0e0; text-decoration: none;
+            transition: all 0.2s ease-in-out; cursor: pointer;
         }}
-        .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
-        
-        /* Ícones do Font Awesome via Pseudo-elementos */
-        .stButton > button::before {{
-            font-family: "Font Awesome 6 Free";
-            font-weight: 900;
-            margin-right: 12px;
-            font-size: 0.9em;
-        }}
-        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }} /* fa-chart-simple */
-        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }} /* fa-box-archive */
-        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}   /* fa-plus */
-        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }} /* fa-pen */
-        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }} /* fa-cart-shopping */
-        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }} /* fa-cogs */
+        .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
+        .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; }}
+        .nav-item i {{ margin-right: 12px; font-size: 0.9em; }}
 
         /* Badge de Notificação */
-        .sidebar-menu .stButton:nth-child(5) > button::after {{
-            content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
+        .badge {{
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
-            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
 
         /* Painel Principal: Cards */
@@ -286,11 +266,18 @@ with st.sidebar:
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
-    menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
-    for item in menu_items:
-        st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
+    
+    menu_items = {
+        "Painel Principal": "Painel Principal", "Meu Estoque": "Meu Estoque",
+        "Adicionar Item": "Adicionar Item", "Registrar Uso": "Registrar Uso",
+        "Lista de Compras": "Lista de Compras", "Gerenciar Cadastros": "Gerenciar Cadastros"
+    }
+
+    for key, value in menu_items.items():
+        st.button(value, on_click=set_page, args=(key,), key=f"btn_{key}", use_container_width=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 14.0 Final</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 14.1 Final</span></div>', unsafe_allow_html=True)
 
 paginas = {
     "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
