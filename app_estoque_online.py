@@ -137,13 +137,19 @@ def generate_pdf_link(df):
     pdf.ln()
 
     for _, row in df.iterrows():
-        pdf.cell(col_widths[0], 8, str(row['Nome do Item']), 1)
-        pdf.cell(col_widths[1], 8, str(row['Marca/Modelo']), 1)
-        pdf.cell(col_widths[2], 8, str(row['Fornecedor Principal']), 1)
-        pdf.cell(col_widths[3], 8, str(row['Qtd. a Comprar (Sugestão)']), 1)
-        pdf.ln()
-        
-    pdf_output = pdf.output(dest='S').encode('latin-1')
+        # Usar try-except para lidar com caracteres que não são latin-1
+        try:
+            pdf.cell(col_widths[0], 8, str(row['Nome do Item']).encode('latin-1', 'replace').decode('latin-1'), 1)
+            pdf.cell(col_widths[1], 8, str(row['Marca/Modelo']).encode('latin-1', 'replace').decode('latin-1'), 1)
+            pdf.cell(col_widths[2], 8, str(row['Fornecedor Principal']).encode('latin-1', 'replace').decode('latin-1'), 1)
+            pdf.cell(col_widths[3], 8, str(row['Qtd. a Comprar (Sugestão)']).encode('latin-1', 'replace').decode('latin-1'), 1)
+            pdf.ln()
+        except Exception as e:
+            print(f"Erro ao processar linha do PDF: {e}")
+
+    # CORREÇÃO APLICADA AQUI: .encode() foi removido
+    pdf_output = pdf.output(dest='S')
+    
     b64 = base64.b64encode(pdf_output).decode('utf-8')
     return f'<a href="data:application/pdf;base64,{b64}" download="lista_de_compras.pdf" style="display: inline-block; padding: 8px 12px; background-color: #00A9FF; color: white; text-decoration: none; border-radius: 8px;">Baixar PDF</a>'
 
@@ -192,15 +198,11 @@ def page_my_stock():
     edited_df = st.data_editor(df_display, hide_index=True, use_container_width=True, key="stock_editor")
     
     if st.button("Salvar Alterações"):
-        # Lógica de salvamento robusta
-        # Define o ID como índice para garantir que a atualização seja correta
         df_original_indexed = st.session_state.stock_df.set_index('ID')
         edited_df_indexed = pd.DataFrame(edited_df).set_index('ID')
         
-        # Atualiza o DataFrame original com base nos dados editados
         df_original_indexed.update(edited_df_indexed)
         
-        # Restaura o DataFrame para o estado original (sem índice de ID)
         st.session_state.stock_df = df_original_indexed.reset_index()
         
         save_data(client, st.session_state.stock_df)
@@ -352,7 +354,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.info("Versão 1.3\n\nFeito para estúdios modernos.")
+    st.info("Versão 1.4\n\nFeito para estúdios modernos.")
 
 # Executa a função da página atual
 if client:
