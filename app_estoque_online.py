@@ -10,15 +10,15 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_page_config(
-    page_title="Tattoo Studio Estoque",
-    page_icon="✒️",
+    page_title="Studio Stock",
+    page_icon="🕒",
     layout="wide"
 )
 
 # --- CONSTANTES GLOBAIS ---
 ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
-APP_VERSION = "2.6"
+APP_VERSION = "2.8"
 
 COLUNAS_ESTOQUE = [
     "ID", "Nome do Item", "Marca/Modelo", "Tipo/Especificação", "Categoria",
@@ -32,85 +32,88 @@ TIPOS_DADOS_ESTOQUE = {
 
 # --- CSS E COMPONENTES VISUAIS ---
 def injetar_estilos(num_itens_alerta=0):
-    """Injeta o CSS para estilizar a aplicação, incluindo ícones e layout da sidebar."""
-    lista_compras_icon = '\\f071' if num_itens_alerta > 0 else '\\f07a'
-
+    """Injeta o CSS para estilizar a aplicação com o novo design."""
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     st.markdown(f"""
     <style>
-        .block-container {{ padding-top: 4rem; }}
-        .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
-        h3 {{ color: #e0e0e0; }}
+        .block-container {{ padding-top: 3rem; }}
+        .stApp {{ background-color: #0f172a; color: #e2e8f0; }}
+        h3 {{ color: #e2e8f0; }}
 
+        /* --- NOVO ESTILO DA SIDEBAR --- */
         [data-testid="stSidebar"] > div:first-child {{
             display: flex; flex-direction: column; height: 100vh;
-            overflow: hidden; background-color: #1a1a2e;
+            overflow: hidden; background-color: #1e293b; padding: 1rem;
         }}
-        .sidebar-menu {{ flex-grow: 1; overflow-y: auto; padding: 0 10px; }}
+        .sidebar-menu {{ flex-grow: 1; }}
 
-        .sidebar-header {{ text-align: center; padding: 1rem 0; }}
-        .sidebar-header .main-icon {{ font-size: 2.5rem; color: #ffffff; margin-bottom: 0.5rem; }}
-        .sidebar-header h3 {{ color: #ffffff; font-weight: bold; margin: 0; }}
+        /* Cabeçalho da Sidebar */
+        .sidebar-header {{
+            display: flex; align-items: center; justify-content: center;
+            padding-bottom: 1.5rem;
+        }}
+        .sidebar-header .main-icon {{ font-size: 1.8rem; color: #ffffff; margin-right: 12px; }}
+        .sidebar-header h3 {{ color: #ffffff; font-weight: bold; margin: 0; font-size: 1.5rem; }}
 
-        /* Estilo definitivo dos botões da Sidebar */
+        /* Botões do Menu */
         .stButton > button {{
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
+            display: flex; align-items: center; justify-content: flex-start;
             text-align: left;
-            padding: 10px 15px;
-            margin: 4px 0;
-            border-radius: 8px;
-            border: 1px solid #2e2e54;
+            padding: 10px 15px; margin: 5px 0;
+            border-radius: 8px; border: none;
             background-color: transparent;
+            color: #cbd5e1; /* slate-300 */
             transition: all 0.2s ease-in-out;
             width: 100%;
         }}
-        .stButton > button:hover {{ background-color: #162447; border-color: #4a4a8a; }}
-        .stButton > button:focus {{ background-color: #2e2e54; color: white; border-color: #4a90e2; font-weight: bold; }}
+        .stButton > button:hover {{ background-color: #334155; color: #ffffff; }} /* slate-700 */
+        .stButton > button:focus {{ background-color: #334155; color: #ffffff; font-weight: 600; }}
         
+        /* Ícones dos Botões */
         .stButton > button::before {{
-            font-family: "Font Awesome 6 Free";
-            font-weight: 900;
-            font-size: 1em;
-            margin-right: 15px;
-            width: 20px;
-            text-align: center;
+            font-family: "Font Awesome 6 Free"; font-weight: 900;
+            font-size: 1.1em; margin-right: 15px; width: 22px; text-align: center;
         }}
-        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f200'; }}
-        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f468'; }}
-        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\f055'; }}
-        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f2f5'; }}
-        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '{lista_compras_icon}'; }}
-        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f013'; }}
+        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f009'; }} /* fa-th-large */
+        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f187'; }} /* fa-archive */
+        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* fa-plus-circle */
+        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f0ab'; }} /* fa-arrow-circle-down */
+        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f07a'; }} /* fa-shopping-cart */
+        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f0d1'; }} /* fa-truck */
         
         /* Badge de Notificação */
         .sidebar-menu .stButton:nth-child(5) button {{ justify-content: space-between; }}
         .sidebar-menu .stButton:nth-child(5) button > div::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
-            background-color: #e53935; color: white; padding: 2px 8px;
-            border-radius: 12px; font-size: 0.8em; font-weight: bold;
-            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
+            background-color: #ef4444; color: white;
+            height: 20px; width: 20px; line-height: 20px; text-align: center;
+            border-radius: 50%; font-size: 0.75em; font-weight: bold;
+            display: { 'flex' if num_itens_alerta > 0 else 'none' };
+            align-items: center; justify-content: center;
         }}
         
+        /* Rodapé da Sidebar */
         .sidebar-footer {{
-            text-align: center; padding: 1rem; flex-shrink: 0;
-            border-top: 1px solid #2e2e54;
+            text-align: center; padding: 1rem;
+            flex-shrink: 0; margin: 10px;
+            background-color: #334155; /* slate-700 */
+            border-radius: 8px;
         }}
-        .sidebar-footer .brand {{ font-weight: bold; color: #e0e0e0; margin: 0; }}
-        .sidebar-footer .version {{ font-size: 0.8em; color: #808080; margin: 0; }}
+        .sidebar-footer .version {{ font-weight: bold; color: #e0e0e0; margin: 0; font-size: 0.9em; }}
+        .sidebar-footer .brand {{ font-size: 0.8em; color: #94a3b8; margin: 0; }}
 
+        /* Estilo dos Cards do Painel Principal */
         .metric-card {{
-            background-color: #1c1c2e; border-radius: 10px; padding: 1.5rem;
+            background-color: #1e293b; border-radius: 10px; padding: 1.5rem;
             display: flex; align-items: center; border-left: 5px solid;
             transition: all 0.3s ease-in-out; margin-bottom: 1rem;
         }}
         .metric-card:hover {{ transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.2); }}
-        .metric-card-1 {{ border-color: #4a90e2; }}
-        .metric-card-2 {{ border-color: #f5a623; }}
-        .metric-card-3 {{ border-color: #7ed321; }}
+        .metric-card-1 {{ border-color: #38bdf8; }}
+        .metric-card-2 {{ border-color: #f59e0b; }}
+        .metric-card-3 {{ border-color: #4ade80; }}
         .metric-icon {{ font-size: 2.5em; margin-right: 1rem; opacity: 0.8; }}
-        .metric-text p {{ margin: 0; font-size: 1em; color: #a9a9a9; }}
+        .metric-text p {{ margin: 0; font-size: 1em; color: #94a3b8; }}
         .metric-text h3 {{ margin: 0; font-size: 1.8em; color: #ffffff; }}
     </style>
     """, unsafe_allow_html=True)
@@ -187,43 +190,46 @@ def gerar_lista_de_compras():
 
 def gerar_pdf_relatorio(dataframe, titulo):
     """Gera um PDF usando fontes base e codificação segura para evitar erros."""
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.add_page()
-    # Usa a fonte base 'Arial' que não requer arquivos .ttf externos
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, titulo, 0, 1, "C")
-    pdf.ln(5)
-    
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 10, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, "R")
-    pdf.ln(5)
-    
-    if dataframe.empty:
-        pdf.set_font("Arial", "I", 12)
-        pdf.cell(0, 10, "Nenhum dado para exibir.", 0, 1, "C")
-    else:
-        pdf.set_font("Arial", "B", 8)
-        pdf.set_fill_color(230, 230, 230)
+    try:
+        pdf = FPDF(orientation='L', unit='mm', format='A4')
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        # Codifica o texto para 'latin-1' para compatibilidade com FPDF
+        pdf.cell(0, 10, titulo.encode('latin-1', 'replace').decode('latin-1'), 0, 1, "C")
+        pdf.ln(5)
         
-        largura_coluna = (pdf.w - 2 * pdf.l_margin) / len(dataframe.columns)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 10, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, "R")
+        pdf.ln(5)
         
-        for header in dataframe.columns:
-            # Codifica o texto para 'latin-1' para compatibilidade com o PDF
-            pdf.cell(largura_coluna, 10, str(header).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C", fill=True)
-        pdf.ln()
-        
-        pdf.set_font("Arial", "", 8)
-        for _, row in dataframe.iterrows():
-            for item in row:
-                pdf.cell(largura_coluna, 10, str(item).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C")
+        if dataframe.empty:
+            pdf.set_font("Arial", "I", 12)
+            pdf.cell(0, 10, "Nenhum dado para exibir.", 0, 1, "C")
+        else:
+            pdf.set_font("Arial", "B", 8)
+            pdf.set_fill_color(230, 230, 230)
+            
+            largura_coluna = (pdf.w - 2 * pdf.l_margin) / len(dataframe.columns)
+            
+            for header in dataframe.columns:
+                pdf.cell(largura_coluna, 10, str(header).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C", fill=True)
             pdf.ln()
             
-    # Retorna os dados do PDF como bytes, que é o formato correto.
-    return pdf.output(dest='S').encode('latin-1')
+            pdf.set_font("Arial", "", 8)
+            for _, row in dataframe.iterrows():
+                for item in row:
+                    pdf.cell(largura_coluna, 10, str(item).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C")
+                pdf.ln()
+                
+        # Retorna o objeto bytes diretamente
+        return pdf.output(dest='S')
+    except Exception as e:
+        logging.error(f"Erro ao gerar PDF: {e}")
+        return None # Retorna None em caso de erro
 
 # --- PÁGINAS DA APLICAÇÃO ---
 def pagina_painel_principal(lista_compras):
-    st.markdown("<h3><i class='fa-solid fa-chart-pie'></i> Painel Principal</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-th-large'></i> Painel Principal</h3>", unsafe_allow_html=True)
     st.markdown("Resumo geral do seu inventário.")
 
     df = st.session_state.estoque_df
@@ -244,7 +250,7 @@ def pagina_painel_principal(lista_compras):
 
 def pagina_meu_estoque():
     c1, c2 = st.columns([3, 1])
-    c1.markdown("<h3><i class='fa-solid fa-boxes-stacked'></i> Meu Estoque</h3>", unsafe_allow_html=True)
+    c1.markdown("<h3><i class='fa-solid fa-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True)
     if c2.button("Adicionar Novo Item", use_container_width=True, type="primary"):
         st.session_state.pagina_atual = "Adicionar Item"; st.rerun()
     
@@ -287,7 +293,10 @@ def pagina_meu_estoque():
 
     if not st.session_state.estoque_df.empty:
         pdf_data = gerar_pdf_relatorio(st.session_state.estoque_df.drop(columns=['ID']), "Relatório de Estoque Completo")
-        c2_pdf.download_button(label="Baixar Relatório PDF", data=pdf_data, file_name=f"relatorio_estoque_{date.today()}.pdf", mime="application/pdf", use_container_width=True)
+        if pdf_data:
+            c2_pdf.download_button(label="Baixar Relatório PDF", data=pdf_data, file_name=f"relatorio_estoque_{date.today()}.pdf", mime="application/pdf", use_container_width=True)
+        else:
+            c2_pdf.error("Erro ao gerar PDF.")
 
 def pagina_adicionar_item():
     st.markdown("<h3><i class='fa-solid fa-plus-circle'></i> Adicionar Novo Item</h3>", unsafe_allow_html=True)
@@ -315,7 +324,7 @@ def pagina_adicionar_item():
                 st.success(f"✅ Item '{nome}' adicionado com sucesso!")
 
 def pagina_registrar_uso():
-    st.markdown("<h3><i class='fa-solid fa-right-from-bracket'></i> Registrar Uso de Material</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-arrow-circle-down'></i> Registrar Uso</h3>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Adicionar Itens Consumidos")
@@ -347,17 +356,20 @@ def pagina_registrar_uso():
                 st.session_state.sessao_uso = []; st.rerun()
 
 def pagina_lista_compras(lista_compras):
-    st.markdown("<h3><i class='fa-solid fa-cart-shopping'></i> Lista de Compras</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-shopping-cart'></i> Lista de Compras</h3>", unsafe_allow_html=True)
     st.write("Itens que atingiram ou ultrapassaram o estoque mínimo.")
     if not lista_compras.empty:
         st.dataframe(lista_compras, use_container_width=True, hide_index=True)
         pdf_data = gerar_pdf_relatorio(lista_compras, "Lista de Compras")
-        st.download_button(label="Baixar Lista em PDF", data=pdf_data, file_name=f"lista_compras_{date.today()}.pdf", mime="application/pdf", use_container_width=True)
+        if pdf_data:
+            st.download_button(label="Baixar Lista em PDF", data=pdf_data, file_name=f"lista_compras_{date.today()}.pdf", mime="application/pdf", use_container_width=True)
+        else:
+            st.error("Erro ao gerar PDF da lista.")
     else:
         st.success("🎉 Sua lista de compras está vazia! Tudo em ordem no estoque.")
 
 def pagina_gerenciar_cadastros():
-    st.markdown("<h3><i class='fa-solid fa-cog'></i> Gerenciar Cadastros</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-truck'></i> Gerenciar Cadastros</h3>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Gerenciar Categorias")
@@ -391,6 +403,10 @@ def pagina_gerenciar_cadastros():
                     st.session_state.fornecedores.remove(forn_del); salvar_dados(); st.rerun()
 
 # --- INICIALIZAÇÃO E CONTROLE DE FLUXO ---
+def set_page(page):
+    """Define a página atual no estado da sessão."""
+    st.session_state.pagina_atual = page
+
 def main():
     if 'app_inicializado' not in st.session_state:
         carregar_dados()
@@ -404,17 +420,26 @@ def main():
     with st.sidebar:
         injetar_estilos(num_itens_alerta)
         
-        st.markdown("""<div class="sidebar-header"><i class="fa-solid fa-pen-nib main-icon"></i><h3>Tattoo Studio Estoque</h3></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="sidebar-header"><i class="fa-solid fa-clock main-icon"></i><h3>Studio Stock</h3></div>""", unsafe_allow_html=True)
         
         st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
-        menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
         
-        for item in menu_items:
-            if st.button(item, key=f"btn_{item}", use_container_width=True):
-                st.session_state.pagina_atual = item; st.rerun()
+        # Mapeamento de nomes de exibição para chaves de página
+        menu_items = {
+            "Painel Principal": "Painel Principal",
+            "Meu Estoque": "Meu Estoque",
+            "Adicionar Item": "Adicionar Item",
+            "Registrar Uso": "Registrar Uso",
+            "Lista de Compras": "Lista de Compras",
+            "Fornecedores": "Gerenciar Cadastros" # Nome de exibição -> Chave da página
+        }
+        
+        for display_name, page_key in menu_items.items():
+            st.button(display_name, key=f"btn_{page_key}", on_click=set_page, args=(page_key,), use_container_width=True)
+            
         st.markdown('</div>', unsafe_allow_html=True)
         
-        st.markdown(f"""<div class="sidebar-footer"><p class="brand">Rá Paixão Tattoo</p><p class="version">Versão {APP_VERSION}</p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="sidebar-footer"><p class="version">Versão {APP_VERSION}</p><p class="brand">Feito para estúdios modernos</p></div>""", unsafe_allow_html=True)
 
     paginas = {
         "Painel Principal": lambda: pagina_painel_principal(lista_compras_atual),
