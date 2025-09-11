@@ -92,6 +92,13 @@ def carregar_componentes_visuais(num_itens_alerta=0):
         /* Outros */
         .stDataFrame, .stDataEditor {{ border: 1px solid #2e2e54; border-radius: 10px; }}
         .stDivider div {{ background-color: #2e2e54; }}
+
+        /* Responsividade */
+        @media (max-width: 768px) {{
+            [data-testid="stSidebar"] {{
+                display: none;
+            }}
+        }}
     </style>
     """, unsafe_allow_html=True)
 
