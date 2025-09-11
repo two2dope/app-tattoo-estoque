@@ -20,7 +20,7 @@ st.set_page_config(
 # --- CONSTANTES GLOBAIS ---
 ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
-APP_VERSION = "2.4"
+APP_VERSION = "2.5"
 
 # Define as colunas e seus tipos de dados para garantir consistência
 COLUNAS_ESTOQUE = [
@@ -51,17 +51,46 @@ def injetar_estilos(num_itens_alerta=0):
             display: flex; flex-direction: column; height: 100vh;
             overflow: hidden; background-color: #1a1a2e;
         }}
-        .sidebar-menu {{ flex-grow: 1; overflow-y: auto; }}
+        .sidebar-menu {{ flex-grow: 1; overflow-y: auto; padding: 0 10px; }}
 
         /* Header da Sidebar */
-        .sidebar-header {{ text-align: center; padding: 1.5rem 0; }}
-        .sidebar-header .main-icon {{ font-size: 3rem; color: #ffffff; margin-bottom: 0.5rem; }}
+        .sidebar-header {{ text-align: center; padding: 1rem 0; }}
+        .sidebar-header .main-icon {{ font-size: 2.5rem; color: #ffffff; margin-bottom: 0.5rem; }}
         .sidebar-header h3 {{ color: #ffffff; font-weight: bold; margin: 0; }}
 
+        /* Novo Estilo dos Botões da Sidebar */
+        .stButton > button {{
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+            padding: 12px 15px !important;
+            margin: 4px 0 !important;
+            border-radius: 8px;
+            border: 1px solid #2e2e54;
+            background-color: transparent;
+            transition: all 0.2s ease-in-out;
+            width: 100%;
+        }}
+        .stButton > button:hover {{
+            background-color: #162447;
+            border-color: #4a4a8a;
+        }}
+        .stButton > button:focus:not(:hover) {{
+            background-color: #2e2e54;
+            color: white;
+            border-color: #4a90e2;
+            font-weight: bold;
+        }}
+        
         /* Ícones dos Botões da Sidebar */
         .stButton > button::before {{
-            font-family: "Font Awesome 6 Free"; font-weight: 900;
-            margin-right: 12px; font-size: 1.1em;
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            font-size: 1em;
+            margin-right: 15px;
+            width: 20px; /* Garante alinhamento */
+            text-align: center;
         }}
         .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel */
         .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque */
@@ -70,19 +99,9 @@ def injetar_estilos(num_itens_alerta=0):
         .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '{lista_compras_icon}'; }} /* Compras (Dinâmico) */
         .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar */
         
-        /* Estilo dos Botões da Sidebar */
-        .stButton > button {{
-            border-radius: 8px; border: 1px solid transparent;
-            transition: background-color 0.2s, border-color 0.2s;
-        }}
-        .stButton > button:hover {{ border-color: #4a4a8a; background-color: #162447; }}
-        .stButton > button:focus:not(:hover) {{ border-color: #4a90e2; background-color: #2e2e54; }}
-
         /* Badge de Notificação */
-        .sidebar-menu .stButton:nth-child(5) > button > div {{
-            display: flex; justify-content: space-between; align-items: center; width: 100%;
-        }}
-        .sidebar-menu .stButton:nth-child(5) > button > div::after {{
+        .sidebar-menu .stButton:nth-child(5) button {{ justify-content: space-between !important; }}
+        .sidebar-menu .stButton:nth-child(5) button > div::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
@@ -97,7 +116,7 @@ def injetar_estilos(num_itens_alerta=0):
         .sidebar-footer .brand {{ font-weight: bold; color: #e0e0e0; margin: 0; }}
         .sidebar-footer .version {{ font-size: 0.8em; color: #808080; margin: 0; }}
 
-        /* Novos Cards de Métricas */
+        /* Cards de Métricas */
         .metric-card {{
             background-color: #1c1c2e; border-radius: 10px; padding: 1.5rem;
             display: flex; align-items: center; border-left: 5px solid;
@@ -212,8 +231,6 @@ def gerar_pdf_relatorio(dataframe, titulo):
     pdf.cell(0, 10, titulo, 0, 1, "C")
     pdf.ln(5)
     
-    # Adiciona a codificação UTF-8 para suportar caracteres especiais
-    pdf.add_font('Arial', '', 'Arial.ttf', uni=True)
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 10, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, "R")
     pdf.ln(5)
@@ -230,17 +247,18 @@ def gerar_pdf_relatorio(dataframe, titulo):
         largura_coluna = largura_disponivel / num_colunas if num_colunas > 0 else 0
         
         for header in dataframe.columns:
-            pdf.cell(largura_coluna, 10, str(header), 1, 0, "C", fill=True)
+            # Codifica o cabeçalho para 'latin-1' para compatibilidade
+            pdf.cell(largura_coluna, 10, str(header).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C", fill=True)
         pdf.ln()
         
         pdf.set_font("Arial", "", 8)
         for _, row in dataframe.iterrows():
             for item in row:
-                pdf.cell(largura_coluna, 10, str(item), 1, 0, "C")
+                # Codifica cada célula para 'latin-1', substituindo caracteres não suportados
+                pdf.cell(largura_coluna, 10, str(item).encode('latin-1', 'replace').decode('latin-1'), 1, 0, "C")
             pdf.ln()
             
-    # CORREÇÃO: pdf.output() retorna uma string que precisa ser codificada.
-    # 'latin-1' é uma codificação segura para arquivos binários como PDF.
+    # CORREÇÃO: Retorna os dados do PDF como bytes, que é o formato correto.
     return pdf.output(dest='S').encode('latin-1')
 
 
