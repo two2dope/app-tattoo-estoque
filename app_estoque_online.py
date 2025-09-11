@@ -17,7 +17,7 @@ ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
-def carregar_componentes_visuais(num_itens_alerta=0, pagina_ativa=""):
+def carregar_componentes_visuais(num_itens_alerta=0):
     # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
@@ -35,7 +35,7 @@ def carregar_componentes_visuais(num_itens_alerta=0, pagina_ativa=""):
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
         .sidebar-header {{ text-align: center; margin-bottom: 1rem; }}
-        .sidebar-icon {{ font-size: 2.5em; margin-bottom: 0.5rem; }}
+        .sidebar-icon {{ font-size: 2.5em; margin-bottom: 0.5rem; color: #e0e0e0; }}
         .sidebar-menu {{ flex-grow: 1; }}
         .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
         .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
@@ -53,13 +53,8 @@ def carregar_componentes_visuais(num_itens_alerta=0, pagina_ativa=""):
             border: 1px solid #2e2e54; /* Moldura visível */
         }}
         .stButton > button:hover {{ background-color: #162447; color: #ffffff; border-color: #4a4a8a; }}
-        
-        /* Estilo do botão ativo (usa a classe padrão do Streamlit para o botão pressionado) */
         .stButton > button:focus:not(:hover) {{
-            background-color: #2e2e54;
-            color: white;
-            border-color: #4a4a8a;
-            font-weight: bold;
+            background-color: #2e2e54; color: white; border-color: #4a4a8a; font-weight: bold;
         }}
 
         /* Ícones do Font Awesome via Pseudo-elementos */
@@ -168,7 +163,7 @@ def gerar_pdf_relatorio(dataframe, titulo):
 
 # --- PÁGINAS DO APP ---
 def pagina_painel_principal():
-    st.header("Painel Principal"); st.write("Resumo geral do seu inventário.")
+    st.markdown("<h3><i class='fa-solid fa-chart-simple'></i> Painel Principal</h3>", unsafe_allow_html=True); st.write("Resumo geral do seu inventário.")
     df = st.session_state.estoque_df; valor_total = (df['Quantidade em Estoque'] * df['Preço de Custo']).sum()
     itens_alerta = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]; total_itens = df.shape[0]
     c1, c2, c3 = st.columns(3)
@@ -181,7 +176,7 @@ def pagina_painel_principal():
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
@@ -210,7 +205,7 @@ def pagina_meu_estoque():
         c2.download_button("Baixar Relatório PDF", pdf_data, f"relatorio_estoque_{date.today()}.pdf", "application/pdf", use_container_width=True)
 
 def pagina_adicionar_item():
-    st.header("Adicionar Novo Item")
+    st.markdown("<h3><i class='fa-solid fa-plus'></i> Adicionar Novo Item</h3>", unsafe_allow_html=True)
     with st.form("novo_item_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         nome=c1.text_input("Nome do Item*"); marca=c1.text_input("Marca/Modelo"); especificacao=c1.text_input("Tipo/Especificação")
@@ -223,7 +218,7 @@ def pagina_adicionar_item():
             else: adicionar_item(nome,marca,especificacao,cat,forn,qtd,est_min,un,pr,obs); st.success("✅ Item adicionado!")
 
 def pagina_registrar_uso():
-    st.header("Registrar Uso de Material"); c1, c2 = st.columns(2)
+    st.markdown("<h3><i class='fa-solid fa-pen'></i> Registrar Uso de Material</h3>", unsafe_allow_html=True); c1, c2 = st.columns(2)
     with c1:
         st.subheader("Adicionar Itens Consumidos"); df = st.session_state.estoque_df
         if not df.empty:
@@ -241,17 +236,17 @@ def pagina_registrar_uso():
             for item in st.session_state.sessao_uso: st.markdown(f"- **{item['qtd']}x** {item['nome']}")
             if st.button("Confirmar Uso", use_container_width=True, type="primary"):
                 for item in st.session_state.sessao_uso: registrar_uso(item['id'], item['qtd'])
-                st.session_state.sessao_uso = []; st.success("Uso de todos os itens da sessão foi registrado!"); st.rerun()
+                st.session_state.sessao_uso = []; st.success("Baixa de estoque confirmada com sucesso!"); st.rerun()
 
 def pagina_lista_compras():
-    st.header("Lista de Compras"); st.write("Itens que atingiram o estoque mínimo.")
+    st.markdown("<h3><i class='fa-solid fa-cart-shopping'></i> Lista de Compras</h3>", unsafe_allow_html=True); st.write("Itens que atingiram o estoque mínimo.")
     if (lista := gerar_lista_de_compras()) is not None:
         st.dataframe(lista, use_container_width=True, hide_index=True)
         pdf_data = gerar_pdf_relatorio(lista, "Lista de Compras"); st.download_button("Baixar Lista PDF", pdf_data, f"lista_compras_{date.today()}.pdf", "application/pdf")
     else: st.success("🎉 Nenhum item precisa de reposição!")
 
 def pagina_gerenciar_cadastros():
-    st.header("Gerenciar Cadastros"); c1, c2 = st.columns(2)
+    st.markdown("<h3><i class='fa-solid fa-cogs'></i> Gerenciar Cadastros</h3>", unsafe_allow_html=True); c1, c2 = st.columns(2)
     with c1:
         st.subheader("Categorias")
         with st.form("nova_cat_form", clear_on_submit=True):
@@ -295,7 +290,7 @@ with st.sidebar:
         st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.0 Final</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.1 Final</span></div>', unsafe_allow_html=True)
 
 paginas = {
     "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
