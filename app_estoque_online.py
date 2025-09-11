@@ -1,363 +1,658 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 from fpdf import FPDF
-import base64
-from datetime import datetime
+import datetime
+import io
 
 # =============================================================================
-# CONFIGURAÇÃO INICIAL DA PÁGINA E ESTILO
+# CONFIGURAÇÃO DA PÁGINA E ESTILOS
 # =============================================================================
 
 st.set_page_config(
-    page_title="Studio Stock",
+    page_title="Tattoo Estoque",
     page_icon="💀",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Função para carregar o CSS customizado e Font Awesome (usado nos cards)
+# Função para carregar o CSS customizado
 def load_css():
-    st.markdown("""
-        <style>
-            @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
-            .stApp { background-color: #0F172A; }
-            h1, h2, h3 { color: #FFFFFF; }
-            
-            /* Sidebar */
-            [data-testid="stSidebar"] { background-color: #1E293B; }
-            [data-testid="stSidebar"] .stButton button {
-                text-align: left !important;
-                justify-content: flex-start !important;
-                white-space: nowrap;
-                padding: 0.5rem 1rem; /* Condensa o menu */
-            }
-            
-            /* Cards do Dashboard */
-            .metric-card { background-color: #334155; border-radius: 10px; padding: 20px; text-align: center; border: 1px solid #475569; }
-            .metric-card i { font-size: 2.5rem; margin-bottom: 10px; color: #00A9FF; }
-            .metric-card .metric-value { font-size: 2rem; font-weight: bold; color: #FFFFFF; }
-            .metric-card .metric-label { font-size: 1rem; color: #94A3B8; }
-        </style>
-    """, unsafe_allow_html=True)
+    """Carrega o CSS customizado para estilizar a aplicação."""
+    with open("style.css") as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-load_css()
+# Injetando o CSS
+# (Nota: Em um ambiente real, o ideal é ter o style.css no mesmo diretório. 
+# Para este script único, o CSS será definido aqui.)
+custom_css = """
+/* Importa a fonte Font Awesome */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+
+/* Estilos Gerais */
+body {
+    background-color: #0F172A; /* Cor de fundo principal */
+}
+
+/* Sidebar */
+.st-emotion-cache-16txtl3 {
+    background-color: #1E293B; /* Cor de fundo da sidebar */
+    padding-top: 2rem;
+}
+
+/* Botões da Sidebar */
+.stButton>button {
+    width: 100%;
+    border-radius: 0.5rem;
+    color: #FFFFFF;
+    background-color: transparent;
+    border: none;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.stButton>button:hover {
+    background-color: #334155;
+    color: #FFFFFF;
+}
+
+.stButton>button:focus {
+    background-color: #00A9FF;
+    color: #FFFFFF;
+    box-shadow: none;
+    outline: none;
+}
+
+/* Cards de Métricas no Painel Principal */
+.metric-card {
+    background-color: #1E293B;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    color: white;
+    text-align: center;
+    border: 1px solid #334155;
+}
+
+.metric-card .icon {
+    font-size: 2.5rem;
+    color: #00A9FF;
+    margin-bottom: 1rem;
+}
+
+.metric-card h3 {
+    font-size: 1.25rem;
+    color: #CBD5E1;
+    margin-bottom: 0.5rem;
+}
+
+.metric-card p {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #FFFFFF;
+}
+
+/* Logo na Sidebar */
+.sidebar-logo {
+    font-size: 3rem;
+    color: #00A9FF;
+    text-align: center;
+    display: block;
+    margin-bottom: 1.5rem;
+}
+
+/* Badge de Notificação */
+.badge-container {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.badge {
+    position: absolute;
+    top: 50%;
+    right: 15px;
+    transform: translateY(-50%);
+    background-color: #EF4444; /* Vermelho */
+    color: white;
+    border-radius: 50%;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    line-height: 1.2;
+}
+"""
+st.markdown(f'<style>{custom_css}</style>', unsafe_allow_html=True)
+
 
 # =============================================================================
-# CONEXÃO COM GOOGLE SHEETS E GERENCIAMENTO DE DADOS
+# CONEXÃO COM GOOGLE SHEETS
 # =============================================================================
 
-EXPECTED_COLUMNS = [
-    "ID", "Nome do Item", "Marca/Modelo", "Tipo/Especificação", "Categoria",
-    "Fornecedor Principal", "Quantidade em Estoque", "Estoque Mínimo",
-    "Unidade de Medida", "Preço de Custo", "Código/SKU", "Observações",
-    "Data da Última Compra"
+# Define o escopo de acesso da API
+SCOPE = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
 ]
 
-@st.cache_resource
+# Schema esperado da planilha
+EXPECTED_COLUMNS = [
+    'ID', 'Nome do Item', 'Marca/Modelo', 'Tipo/Especificação', 'Categoria', 
+    'Fornecedor Principal', 'Quantidade em Estoque', 'Estoque Mínimo', 
+    'Unidade de Medida', 'Preço de Custo', 'Observações', 'Data da Última Compra'
+]
+
+@st.cache_resource(ttl=600)
 def get_gspread_client():
-    try:
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        return gspread.authorize(creds)
-    except Exception as e:
-        st.error(f"Erro de conexão com Google Sheets: {e}")
-        return None
+    """Retorna um cliente gspread autenticado."""
+    creds_dict = {
+        "type": st.secrets["gcp_service_account"]["type"],
+        "project_id": st.secrets["gcp_service_account"]["project_id"],
+        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+        "private_key": st.secrets["gcp_service_account"]["private_key"],
+        "client_email": st.secrets["gcp_service_account"]["client_email"],
+        "client_id": st.secrets["gcp_service_account"]["client_id"],
+        "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+        "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+    }
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
+    client = gspread.authorize(creds)
+    return client
 
 @st.cache_data(ttl=60)
-def load_data(_client, sheet_name="BaseDeDados_Estoque", worksheet_name="estoque"):
+def load_data():
+    """Carrega os dados da planilha Google Sheets."""
     try:
-        spreadsheet = _client.open(sheet_name)
-        worksheet = spreadsheet.worksheet(worksheet_name)
-        data = worksheet.get_all_records()
+        client = get_gspread_client()
+        sheet = client.open("BaseDeDados_Estoque").worksheet("estoque")
+        records = sheet.get_all_records()
         
-        if not data:
+        if not records:
+            # Planilha vazia, retorna DataFrame com a estrutura correta
             return pd.DataFrame(columns=EXPECTED_COLUMNS)
+            
+        df = pd.DataFrame(records)
 
-        df = pd.DataFrame(data)
+        # Garante que todas as colunas esperadas existam
         for col in EXPECTED_COLUMNS:
             if col not in df.columns:
-                df[col] = None
-
-        numeric_cols = ['Quantidade em Estoque', 'Estoque Mínimo', 'Preço de Custo', 'ID']
+                df[col] = ''
+        
+        # Converte colunas numéricas, tratando erros
+        numeric_cols = ['Quantidade em Estoque', 'Estoque Mínimo', 'Preço de Custo']
         for col in numeric_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        return df[EXPECTED_COLUMNS]
+            
+        return df[EXPECTED_COLUMNS] # Garante a ordem correta
+
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error("Planilha 'BaseDeDados_Estoque' não encontrada. Verifique o nome e as permissões.")
+        return pd.DataFrame(columns=EXPECTED_COLUMNS)
+    except gspread.exceptions.WorksheetNotFound:
+        st.error("Aba 'estoque' não encontrada na planilha. Verifique o nome da aba.")
+        return pd.DataFrame(columns=EXPECTED_COLUMNS)
     except Exception as e:
-        st.error(f"Não foi possível carregar os dados: {e}")
+        st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame(columns=EXPECTED_COLUMNS)
 
-def save_data(client, df):
+def save_data(df):
+    """Salva o DataFrame de volta na planilha Google Sheets."""
     try:
-        spreadsheet = client.open("BaseDeDados_Estoque")
-        worksheet = spreadsheet.worksheet("estoque")
-        worksheet.clear()
-        df_to_save = df.fillna('').astype(str)
-        worksheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+        # Garante que o DataFrame a ser salvo não contenha NaNs
+        df_to_save = df.fillna('').copy()
+
+        client = get_gspread_client()
+        sheet = client.open("BaseDeDados_Estoque").worksheet("estoque")
+        
+        # Limpa a planilha antes de inserir os novos dados
+        sheet.clear()
+        
+        # Escreve o cabeçalho e depois os dados
+        header = df_to_save.columns.values.tolist()
+        data_to_insert = df_to_save.values.tolist()
+        sheet.update([header] + data_to_insert)
+
+        # Limpa o cache para forçar o recarregamento dos dados
         st.cache_data.clear()
+        return True
     except Exception as e:
         st.error(f"Erro ao salvar os dados: {e}")
-
-client = get_gspread_client()
-if client and 'stock_df' not in st.session_state:
-    st.session_state.stock_df = load_data(client)
-elif 'stock_df' not in st.session_state:
-    st.session_state.stock_df = pd.DataFrame(columns=EXPECTED_COLUMNS)
-
-def get_unique_values(column_name):
-    df = st.session_state.stock_df
-    if not df.empty and column_name in df.columns:
-        return sorted([x for x in df[column_name].unique() if pd.notna(x) and str(x).strip() != ''])
-    return []
+        return False
 
 # =============================================================================
-# FUNÇÃO DE GERAÇÃO DE PDF
+# GERAÇÃO DE PDF
 # =============================================================================
+
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, 'Lista de Compras - Studio Stock', 0, 1, 'C')
+        self.cell(0, 10, 'Lista de Compras - Tattoo Estoque', 0, 1, 'C')
         self.ln(5)
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+        self.cell(0, 10, f'Gerado em: {datetime.datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 0, 'R')
 
-def generate_pdf_link(df):
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=10)
-    
-    headers = ['Item', 'Marca/Modelo', 'Fornecedor', 'Comprar (Sugestão)']
-    col_widths = [70, 45, 45, 30]
-    for i, header in enumerate(headers):
-        pdf.cell(col_widths[i], 10, header, 1, 0, 'C')
-    pdf.ln()
+    def create_table(self, data, headers):
+        self.set_fill_color(224, 235, 255)
+        self.set_font('Arial', 'B', 10)
+        
+        # Largura das colunas (ajuste conforme necessário)
+        col_widths = [60, 40, 30, 30, 30] 
+        
+        # Cabeçalho
+        for i, header in enumerate(headers):
+            self.cell(col_widths[i], 7, header, 1, 0, 'C', 1)
+        self.ln()
 
-    for _, row in df.iterrows():
-        # Usar try-except para lidar com caracteres que não são latin-1
-        try:
-            pdf.cell(col_widths[0], 8, str(row['Nome do Item']).encode('latin-1', 'replace').decode('latin-1'), 1)
-            pdf.cell(col_widths[1], 8, str(row['Marca/Modelo']).encode('latin-1', 'replace').decode('latin-1'), 1)
-            pdf.cell(col_widths[2], 8, str(row['Fornecedor Principal']).encode('latin-1', 'replace').decode('latin-1'), 1)
-            pdf.cell(col_widths[3], 8, str(row['Qtd. a Comprar (Sugestão)']).encode('latin-1', 'replace').decode('latin-1'), 1)
-            pdf.ln()
-        except Exception as e:
-            print(f"Erro ao processar linha do PDF: {e}")
-
-    # CORREÇÃO APLICADA AQUI: .encode() foi removido
-    pdf_output = pdf.output(dest='S')
-    
-    b64 = base64.b64encode(pdf_output).decode('utf-8')
-    return f'<a href="data:application/pdf;base64,{b64}" download="lista_de_compras.pdf" style="display: inline-block; padding: 8px 12px; background-color: #00A9FF; color: white; text-decoration: none; border-radius: 8px;">Baixar PDF</a>'
+        # Dados
+        self.set_font('Arial', '', 10)
+        fill = False
+        for row in data:
+            for i, item in enumerate(row):
+                self.cell(col_widths[i], 6, str(item), 1, 0, 'L', fill)
+            self.ln()
+            fill = not fill
 
 # =============================================================================
-# PÁGINAS (VIEWS)
+# INICIALIZAÇÃO E ESTADO DA SESSÃO
 # =============================================================================
 
-def page_dashboard():
+if 'page' not in st.session_state:
+    st.session_state.page = 'Painel Principal'
+
+if 'session_items' not in st.session_state:
+    st.session_state.session_items = []
+
+# Carrega os dados
+df = load_data()
+
+# =============================================================================
+# SIDEBAR / NAVEGAÇÃO
+# =============================================================================
+
+with st.sidebar:
+    st.markdown('<i class="fa-solid fa-skull sidebar-logo"></i>', unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: white; margin-bottom: 2rem;'>Tattoo Estoque</h1>", unsafe_allow_html=True)
+
+    if st.button("🏠 Painel Principal"):
+        st.session_state.page = 'Painel Principal'
+    if st.button("📦 Meu Estoque"):
+        st.session_state.page = 'Meu Estoque'
+    if st.button("➕ Adicionar Item"):
+        st.session_state.page = 'Adicionar Item'
+    if st.button("✒️ Registrar Uso"):
+        st.session_state.page = 'Registrar Uso'
+
+    # Botão Lista de Compras com badge
+    items_in_alert_count = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]
+    button_label = "🛒 Lista de Compras"
+    
+    if items_in_alert_count > 0:
+        st.markdown(
+            f"""
+            <div class="badge-container">
+                <button class="stButton" style="width:100%;" onclick="document.querySelector('[data-testid=\"stMarkdownContainer\"] .stButton>button:nth-of-type(5)').click()">
+                    {button_label}
+                </button>
+                <span class="badge">{items_in_alert_count}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Botão invisível para acionar a lógica do Streamlit
+        if st.button(button_label, key="hidden_shopping_list_btn", type="primary"):
+            st.session_state.page = 'Lista de Compras'
+    else:
+        if st.button(button_label):
+            st.session_state.page = 'Lista de Compras'
+
+    if st.button("📂 Cadastros"):
+        st.session_state.page = 'Cadastros'
+
+    # Rodapé da Sidebar
+    st.markdown("---")
+    st.markdown(
+        "<p style='text-align: center; color: #CBD5E1;'>Versão 2.0</p>", 
+        unsafe_allow_html=True
+    )
+
+
+# =============================================================================
+# PÁGINAS DA APLICAÇÃO
+# =============================================================================
+
+# ---------------------------------
+# 5.1. Painel Principal (Dashboard)
+# ---------------------------------
+if st.session_state.page == 'Painel Principal':
     st.title("Painel Principal")
-    df = st.session_state.stock_df
-    if df.empty:
-        st.warning("Nenhum item no estoque. Adicione um item para começar.")
-        return
+    st.markdown("---")
 
-    total_value = (df['Quantidade em Estoque'] * df['Preço de Custo']).sum()
-    items_in_alert = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]
-    total_unique_items = df.shape[0]
+    # Métricas
+    valor_total_estoque = (df['Quantidade em Estoque'] * df['Preço de Custo']).sum()
+    itens_em_alerta = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]
+    total_itens_unicos = len(df)
 
     col1, col2, col3 = st.columns(3)
-    col1.markdown(f"""<div class="metric-card"><i class="fa-solid fa-gem"></i><div class="metric-value">R$ {total_value:,.2f}</div><div class="metric-label">Valor Total do Estoque</div></div>""", unsafe_allow_html=True)
-    col2.markdown(f"""<div class="metric-card"><i class="fa-solid fa-triangle-exclamation"></i><div class="metric-value">{items_in_alert}</div><div class="metric-label">Itens em Alerta</div></div>""", unsafe_allow_html=True)
-    col3.markdown(f"""<div class="metric-card"><i class="fa-solid fa-boxes-stacked"></i><div class="metric-value">{total_unique_items}</div><div class="metric-label">Total de Itens Únicos</div></div>""", unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    urgent_items = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']]
-    if not urgent_items.empty:
-        st.subheader("Itens Precisando de Reposição Urgente")
-        for _, row in urgent_items.iterrows():
-            st.error(f"**{row['Nome do Item']}** ({row.get('Marca/Modelo', '')}) - Estoque: {row['Quantidade em Estoque']} / Mínimo: {row['Estoque Mínimo']}")
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="icon"><i class="fa-solid fa-dollar-sign"></i></div>
+            <h3>Valor Total do Estoque</h3>
+            <p>R$ {valor_total_estoque:,.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3>Itens em Alerta</h3>
+            <p>{itens_em_alerta}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="icon"><i class="fa-solid fa-box-archive"></i></div>
+            <h3>Total de Itens Únicos</h3>
+            <p>{total_itens_unicos}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-def page_my_stock():
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # Itens precisando de reposição
+    st.subheader("Itens Precisando de Reposição Urgente")
+    df_alerta = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']]
+
+    if df_alerta.empty:
+        st.success("Nenhum item precisando de reposição no momento.")
+    else:
+        for index, row in df_alerta.iterrows():
+            st.warning(
+                f"**{row['Nome do Item']} ({row['Marca/Modelo']})** - "
+                f"Estoque: {row['Quantidade em Estoque']} / Mínimo: {row['Estoque Mínimo']}"
+            )
+
+
+# ---------------------------------
+# 5.2. Meu Estoque
+# ---------------------------------
+elif st.session_state.page == 'Meu Estoque':
     st.title("Meu Estoque")
-    if st.session_state.stock_df.empty:
-        st.info("Seu estoque está vazio.")
-        return
-
-    search_query = st.text_input("Buscar por nome, marca ou tipo...", placeholder="Buscar...")
     
-    df_display = st.session_state.stock_df.copy()
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        search_query = st.text_input("Buscar por Nome, Marca ou Tipo", placeholder="Digite para buscar...")
+    with col2:
+        categorias = ["Todas"] + sorted(df['Categoria'].unique().tolist())
+        category_filter = st.selectbox("Filtrar por Categoria", options=categorias)
+
+    # Lógica de filtro
+    filtered_df = df.copy()
     if search_query:
-        df_display = df_display[
-            df_display['Nome do Item'].str.contains(search_query, case=False, na=False) |
-            df_display['Marca/Modelo'].str.contains(search_query, case=False, na=False)
+        filtered_df = filtered_df[
+            filtered_df['Nome do Item'].str.contains(search_query, case=False, na=False) |
+            filtered_df['Marca/Modelo'].str.contains(search_query, case=False, na=False) |
+            filtered_df['Tipo/Especificação'].str.contains(search_query, case=False, na=False)
         ]
+    if category_filter != "Todas":
+        filtered_df = filtered_df[filtered_df['Categoria'] == category_filter]
+
+    st.markdown("Edite os dados diretamente na tabela e clique em 'Salvar Alterações'.")
     
-    edited_df = st.data_editor(df_display, hide_index=True, use_container_width=True, key="stock_editor")
-    
+    edited_df = st.data_editor(
+        filtered_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="data_editor_estoque",
+        hide_index=True
+    )
+
     if st.button("Salvar Alterações"):
-        df_original_indexed = st.session_state.stock_df.set_index('ID')
-        edited_df_indexed = pd.DataFrame(edited_df).set_index('ID')
-        
-        df_original_indexed.update(edited_df_indexed)
-        
-        st.session_state.stock_df = df_original_indexed.reset_index()
-        
-        save_data(client, st.session_state.stock_df)
-        st.success("Alterações salvas com sucesso!")
-        st.rerun()
-
-def page_add_item():
-    st.title("Adicionar Novo Item")
-    with st.form(key="add_item_form"):
-        c1, c2 = st.columns(2)
-        with c1:
-            nome = st.text_input("Nome do Item")
-            tipo = st.text_input("Tipo/Especificação")
-            categorias = get_unique_values("Categoria") + ["Adicionar Nova..."]
-            categoria_sel = st.selectbox("Categoria", categorias)
-            if categoria_sel == "Adicionar Nova...":
-                categoria_sel = st.text_input("Nome da Nova Categoria")
-            qtd = st.number_input("Qtd. em Estoque", min_value=0.0, step=0.1, format="%.2f")
-            unidade = st.selectbox("Unidade de Medida", ["Unidade", "Caixa", "Frasco", "Par", "Rolo"])
-        with c2:
-            marca = st.text_input("Marca/Modelo")
-            sku = st.text_input("Código/SKU (Opcional)")
-            fornecedores = get_unique_values("Fornecedor Principal") + ["Adicionar Novo..."]
-            fornecedor_sel = st.selectbox("Fornecedor Principal", fornecedores)
-            if fornecedor_sel == "Adicionar Novo...":
-                fornecedor_sel = st.text_input("Nome do Novo Fornecedor")
-            minimo = st.number_input("Estoque Mínimo", min_value=0, step=1)
-            custo = st.number_input("Preço de Custo (R$)", min_value=0.0, format="%.2f")
-        
-        observacoes = st.text_area("Observações Adicionais")
-        
-        if st.form_submit_button("Salvar Item"):
-            if not nome or not categoria_sel:
-                st.error("Nome do Item e Categoria são obrigatórios.")
+        with st.spinner("Salvando..."):
+            if save_data(edited_df):
+                st.success("Estoque atualizado com sucesso!")
+                st.rerun()
             else:
-                new_id = (st.session_state.stock_df['ID'].max() + 1) if not st.session_state.stock_df.empty else 1
-                new_item = pd.DataFrame([{
-                    "ID": new_id, "Nome do Item": nome, "Marca/Modelo": marca, "Tipo/Especificação": tipo,
-                    "Categoria": categoria_sel, "Fornecedor Principal": fornecedor_sel, "Quantidade em Estoque": qtd,
-                    "Estoque Mínimo": minimo, "Unidade de Medida": unidade, "Preço de Custo": custo,
-                    "Código/SKU": sku, "Observações": observacoes,
-                    "Data da Última Compra": datetime.now().strftime('%Y-%m-%d')
-                }])
-                st.session_state.stock_df = pd.concat([st.session_state.stock_df, new_item], ignore_index=True)
-                save_data(client, st.session_state.stock_df)
-                st.success(f"Item '{nome}' adicionado com sucesso!")
+                st.error("Falha ao salvar. Tente novamente.")
 
-def page_register_usage():
+# ---------------------------------
+# 5.3. Adicionar Item
+# ---------------------------------
+elif st.session_state.page == 'Adicionar Item':
+    st.title("Adicionar Novo Item ao Estoque")
+
+    with st.form(key="add_item_form"):
+        # Linha 1: Nome, Marca/Modelo
+        col1, col2 = st.columns(2)
+        with col1:
+            nome_item = st.text_input("Nome do Item", max_chars=100)
+        with col2:
+            marca_modelo = st.text_input("Marca/Modelo", max_chars=100)
+            
+        # Linha 2: Tipo, Fornecedor
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_especificacao = st.text_input("Tipo/Especificação", placeholder="Ex: Agulha 7RL, Tinta preta", max_chars=100)
+
+        with col2:
+            fornecedores = sorted(df['Fornecedor Principal'].unique().tolist())
+            fornecedor_selecionado = st.selectbox(
+                "Fornecedor Principal", ["<Adicionar Novo>"] + fornecedores
+            )
+            if fornecedor_selecionado == "<Adicionar Novo>":
+                fornecedor_principal = st.text_input("Nome do Novo Fornecedor")
+            else:
+                fornecedor_principal = fornecedor_selecionado
+
+        # Linha 3: Categoria, Unidade de Medida
+        col1, col2 = st.columns(2)
+        with col1:
+            categorias = sorted(df['Categoria'].unique().tolist())
+            categoria_selecionada = st.selectbox(
+                "Categoria", ["<Adicionar Novo>"] + categorias
+            )
+            if categoria_selecionada == "<Adicionar Novo>":
+                categoria = st.text_input("Nome da Nova Categoria")
+            else:
+                categoria = categoria_selecionada
+
+        with col2:
+            unidade_medida = st.selectbox(
+                "Unidade de Medida",
+                ["Unidade(s)", "Caixa(s)", "Frasco(s)", "Pacote(s)", "Rolo(s)"]
+            )
+            
+        # Linha 4: Quantidade, Estoque Mínimo, Preço
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            qtd_estoque = st.number_input("Quantidade em Estoque", min_value=0, step=1)
+        with col2:
+            estoque_minimo = st.number_input("Estoque Mínimo", min_value=0, step=1)
+        with col3:
+            preco_custo = st.number_input("Preço de Custo (R$)", min_value=0.0, format="%.2f")
+
+        # Linha 5: Observações, Data
+        col1, col2 = st.columns(2)
+        with col1:
+             observacoes = st.text_area("Observações")
+        with col2:
+             data_ultima_compra = st.date_input("Data da Última Compra", datetime.date.today())
+
+        # Botão de submit
+        submit_button = st.form_submit_button(label="Adicionar Item")
+
+        if submit_button:
+            if not nome_item or not categoria or not fornecedor_principal:
+                st.warning("Preencha os campos obrigatórios: Nome do Item, Categoria e Fornecedor.")
+            else:
+                novo_id = df['ID'].max() + 1 if not df.empty else 1
+                new_item_data = {
+                    'ID': novo_id, 'Nome do Item': nome_item, 'Marca/Modelo': marca_modelo,
+                    'Tipo/Especificação': tipo_especificacao, 'Categoria': categoria,
+                    'Fornecedor Principal': fornecedor_principal, 'Quantidade em Estoque': qtd_estoque,
+                    'Estoque Mínimo': estoque_minimo, 'Unidade de Medida': unidade_medida,
+                    'Preço de Custo': preco_custo, 'Observações': observacoes,
+                    'Data da Última Compra': data_ultima_compra.strftime("%Y-%m-%d")
+                }
+                
+                df_atualizado = pd.concat([df, pd.DataFrame([new_item_data])], ignore_index=True)
+                
+                with st.spinner("Salvando..."):
+                    if save_data(df_atualizado):
+                        st.success("Item adicionado com sucesso!")
+                    else:
+                        st.error("Falha ao adicionar o item.")
+
+
+# ---------------------------------
+# 5.4. Registrar Uso
+# ---------------------------------
+elif st.session_state.page == 'Registrar Uso':
     st.title("Registrar Uso de Material")
-    df = st.session_state.stock_df
-    if df.empty:
-        st.warning("Estoque vazio. Não é possível registrar uso.")
-        return
     
-    if 'session_items' not in st.session_state:
-        st.session_state.session_items = []
+    col1, col2 = st.columns([1.5, 1])
 
-    col1, col2 = st.columns([2, 1])
     with col1:
         st.subheader("Adicionar Itens Consumidos")
-        item_options = {f"{row['Nome do Item']} ({row.get('Marca/Modelo', '')}) - Estoque: {row['Quantidade em Estoque']}": row['ID'] for index, row in df.iterrows()}
-        selected_item_str = st.selectbox("Buscar item...", [""] + list(item_options.keys()))
         
+        # Cria uma lista de nomes de item para o selectbox
+        item_options = df.apply(lambda row: f"{row['Nome do Item']} ({row['Marca/Modelo']}) - Estoque: {row['Quantidade em Estoque']}", axis=1).tolist()
+        
+        selected_item_str = st.selectbox("Buscar item no estoque...", options=[""] + item_options)
+
         if selected_item_str:
-            selected_id = item_options[selected_item_str]
-            qty_consumed = st.number_input("Quantidade a ser usada:", min_value=0.1, step=0.1, value=1.0, format="%.2f", key=f"qty_{selected_id}")
+            # Extrai o nome do item da string selecionada
+            item_name_to_find = selected_item_str.split(' (')[0]
+            item_selecionado = df[df['Nome do Item'] == item_name_to_find].iloc[0]
+
+            max_qty = int(item_selecionado['Quantidade em Estoque'])
+            quantidade_usada = st.number_input("Quantidade Utilizada", min_value=1, max_value=max_qty, step=1, key=f"qty_{item_selecionado['ID']}")
+
             if st.button("Adicionar à Sessão"):
-                st.session_state.session_items.append({"id": selected_id, "name": selected_item_str.split(' - ')[0], "quantity": qty_consumed})
+                st.session_state.session_items.append({
+                    "ID": item_selecionado['ID'],
+                    "Nome": f"{item_selecionado['Nome do Item']} ({item_selecionado['Marca/Modelo']})",
+                    "Quantidade": quantidade_usada
+                })
                 st.rerun()
 
     with col2:
         st.subheader("Itens da Sessão")
-        if st.session_state.session_items:
-            for item in st.session_state.session_items:
-                st.write(f"- {item['quantity']}x {item['name']}")
-            if st.button("Confirmar Uso", type="primary", use_container_width=True):
-                for item_to_use in st.session_state.session_items:
-                    item_index = st.session_state.stock_df[st.session_state.stock_df['ID'] == item_to_use['id']].index
-                    if not item_index.empty:
-                        idx = item_index[0]
-                        current_qty = st.session_state.stock_df.loc[idx, 'Quantidade em Estoque']
-                        st.session_state.stock_df.loc[idx, 'Quantidade em Estoque'] = float(current_qty) - float(item_to_use['quantity'])
-                
-                save_data(client, st.session_state.stock_df)
-                st.session_state.session_items = []
-                st.success("Baixa no estoque realizada com sucesso!")
-                st.rerun()
+        if not st.session_state.session_items:
+            st.info("Nenhum item adicionado à sessão.")
         else:
-            st.info("Nenhum item adicionado.")
+            for item in st.session_state.session_items:
+                st.write(f"- {item['Nome']}: {item['Quantidade']}")
+        
+        if st.session_state.session_items:
+            if st.button("Confirmar Uso", type="primary", use_container_width=True):
+                df_copy = df.copy()
+                try:
+                    for item_sessao in st.session_state.session_items:
+                        item_id = item_sessao['ID']
+                        qty_used = item_sessao['Quantidade']
+                        
+                        # Localiza o índice do item no DataFrame
+                        idx = df_copy.index[df_copy['ID'] == item_id].tolist()[0]
+                        
+                        # Subtrai a quantidade
+                        df_copy.loc[idx, 'Quantidade em Estoque'] -= qty_used
 
-def page_shopping_list():
+                    with st.spinner("Atualizando estoque..."):
+                        if save_data(df_copy):
+                            st.success("Uso registrado e estoque atualizado com sucesso!")
+                            st.session_state.session_items = [] # Limpa a sessão
+                            st.rerun()
+                        else:
+                            st.error("Erro ao salvar as alterações no estoque.")
+
+                except Exception as e:
+                    st.error(f"Ocorreu um erro ao processar o uso: {e}")
+
+# ---------------------------------
+# 5.5. Lista de Compras
+# ---------------------------------
+elif st.session_state.page == 'Lista de Compras':
     st.title("Lista de Compras")
-    df = st.session_state.stock_df
-    shopping_list_df = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].copy()
+    st.markdown("Esta lista mostra todos os itens que atingiram ou estão abaixo do estoque mínimo definido.")
 
-    if shopping_list_df.empty:
-        st.success("Ótima notícia! Nenhum item precisa de reposição.")
-        return
-
-    shopping_list_df['Qtd. a Comprar (Sugestão)'] = shopping_list_df.apply(
-        lambda row: f"{max(0, row['Estoque Mínimo'] - row['Quantidade em Estoque'])} {row['Unidade de Medida']}(s)", 
-        axis=1
-    )
+    df_compras = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].copy()
     
-    st.dataframe(shopping_list_df[['Nome do Item', 'Marca/Modelo', 'Fornecedor Principal', 'Qtd. a Comprar (Sugestão)']], hide_index=True, use_container_width=True)
-    
-    pdf_link = generate_pdf_link(shopping_list_df)
-    st.markdown(pdf_link, unsafe_allow_html=True)
+    if df_compras.empty:
+        st.success("Tudo em ordem! Nenhum item na lista de compras.")
+    else:
+        df_compras['Qtd. a Comprar (Sugestão)'] = df_compras['Estoque Mínimo'] - df_compras['Quantidade em Estoque']
+        
+        # Garante que a sugestão seja no mínimo 1
+        df_compras['Qtd. a Comprar (Sugestão)'] = df_compras['Qtd. a Comprar (Sugestão)'].apply(lambda x: max(1, x))
 
-def page_registrations():
-    st.title("Cadastros")
+        # Seleciona e renomeia colunas para exibição
+        display_cols = {
+            'Nome do Item': 'Item (Nome/Marca/Tipo)',
+            'Fornecedor Principal': 'Fornecedor',
+            'Quantidade em Estoque': 'Estoque Atual',
+            'Estoque Mínimo': 'Estoque Mínimo',
+            'Qtd. a Comprar (Sugestão)': 'Qtd. a Comprar (Sugestão)'
+        }
+        df_display = df_compras[display_cols.keys()].rename(columns=display_cols)
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+        if st.button("🖨️ Imprimir em PDF"):
+            pdf = PDF()
+            pdf.add_page()
+            
+            pdf_data = df_display.values.tolist()
+            pdf_headers = df_display.columns.tolist()
+            
+            pdf.create_table(pdf_data, pdf_headers)
+
+            # Salva o PDF em um buffer de bytes
+            pdf_buffer = io.BytesIO()
+            pdf.output(pdf_buffer)
+            pdf_buffer.seek(0)
+
+            st.download_button(
+                label="Baixar Lista de Compras em PDF",
+                data=pdf_buffer,
+                file_name="lista_de_compras_tattoo_estoque.pdf",
+                mime="application/pdf"
+            )
+
+# ---------------------------------
+# 5.6. Cadastros
+# ---------------------------------
+elif st.session_state.page == 'Cadastros':
+    st.title("Gerenciar Cadastros")
+
     tab1, tab2 = st.tabs(["Fornecedores", "Categorias"])
+
     with tab1:
         st.subheader("Fornecedores Cadastrados")
-        for item in get_unique_values("Fornecedor Principal"): st.write(f"- {item}")
+        fornecedores_unicos = sorted(df['Fornecedor Principal'].unique().tolist())
+        if fornecedores_unicos:
+            for fornecedor in fornecedores_unicos:
+                st.info(fornecedor)
+        else:
+            st.write("Nenhum fornecedor cadastrado.")
+        st.caption("Novos fornecedores são adicionados na tela 'Adicionar Item'.")
+        
     with tab2:
         st.subheader("Categorias Cadastradas")
-        for item in get_unique_values("Categoria"): st.write(f"- {item}")
-
-# =============================================================================
-# NAVEGAÇÃO PRINCIPAL (SIDEBAR)
-# =============================================================================
-
-PAGES = {
-    "Painel Principal": ("🏠", page_dashboard),
-    "Meu Estoque": ("📦", page_my_stock),
-    "Adicionar Item": ("➕", page_add_item),
-    "Registrar Uso": ("✔️", page_register_usage),
-    "Lista de Compras": ("🛒", page_shopping_list),
-    "Cadastros": ("📚", page_registrations),
-}
-
-with st.sidebar:
-    st.markdown('<div style="text-align: center; padding: 1rem 0;"><i class="fa-solid fa-skull" style="font-size: 4rem; color: #E0E0E0;"></i></div>', unsafe_allow_html=True)
-    st.title("Studio Stock")
-    
-    if "page" not in st.session_state:
-        st.session_state.page = "Painel Principal"
-
-    df = st.session_state.get('stock_df', pd.DataFrame())
-    alert_count = 0
-    if not df.empty:
-        alert_count = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]
-
-    for page_name, (icon, page_func) in PAGES.items():
-        badge = f" ({alert_count})" if page_name == "Lista de Compras" and alert_count > 0 else ""
-        if st.button(f"{icon} {page_name}{badge}", use_container_width=True):
-            st.session_state.page = page_name
-            st.rerun()
-
-    st.markdown("---")
-    st.info("Versão 1.4\n\nFeito para estúdios modernos.")
-
-# Executa a função da página atual
-if client:
-    PAGES[st.session_state.page][1]()
-else:
-    st.error("Falha na conexão com a base de dados. Verifique as configurações de 'secrets'.")
+        categorias_unicas = sorted(df['Categoria'].unique().tolist())
+        if categorias_unicas:
+            for categoria in categorias_unicas:
+                st.info(categoria)
+        else:
+            st.write("Nenhuma categoria cadastrada.")
+        st.caption("Novas categorias são adicionadas na tela 'Adicionar Item'.")
