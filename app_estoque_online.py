@@ -17,15 +17,14 @@ ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
-def carregar_componentes_visuais(num_itens_alerta=0):
+def carregar_componentes_visuais(num_itens_alerta=0, pagina_ativa=""):
     # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
     <style>
         /* Ajustes Gerais */
-        iframe {{ display: none; }} /* Oculta o iframe de componentes HTML */
-        .block-container {{ padding-top: 3rem; }}
+        .block-container {{ padding-top: 2rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
         
@@ -36,41 +35,61 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
         .sidebar-header {{ text-align: center; margin-bottom: 1rem; }}
+        .sidebar-icon {{ font-size: 2.5em; margin-bottom: 0.5rem; }}
         .sidebar-menu {{ flex-grow: 1; }}
         .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
         .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
         .footer-version {{ font-size: 0.8em; color: #666; display: block; }}
         
-        /* Menu da Sidebar (HTML) */
-        .nav-item {{
+        /* Botões do Menu da Sidebar */
+        .stButton > button {{
+            width: 100%; text-align: left !important;
+            background-color: transparent; color: #e0e0e0; 
+            padding: 10px 15px; margin-bottom: 5px; font-size: 1.0em;
+            transition: all 0.2s ease-in-out; white-space: nowrap; 
+            overflow: hidden; text-overflow: ellipsis; 
             display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 15px; margin-bottom: 4px; border-radius: 8px;
-            font-size: 1.0em; color: #e0e0e0; text-decoration: none;
-            transition: all 0.2s ease-in-out; cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid #2e2e54; /* Moldura visível */
         }}
-        .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
-        .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; }}
-        .nav-item .icon {{ margin-right: 12px; font-size: 0.9em; width: 20px; text-align: center;}}
-        .nav-item .text {{ flex-grow: 1; }}
+        .stButton > button:hover {{ background-color: #162447; color: #ffffff; border-color: #4a4a8a; }}
+        
+        /* Estilo do botão ativo (usa a classe padrão do Streamlit para o botão pressionado) */
+        .stButton > button:focus:not(:hover) {{
+            background-color: #2e2e54;
+            color: white;
+            border-color: #4a4a8a;
+            font-weight: bold;
+        }}
+
+        /* Ícones do Font Awesome via Pseudo-elementos */
+        .stButton > button::before {{
+            font-family: "Font Awesome 6 Free"; font-weight: 900;
+            margin-right: 12px; font-size: 0.9em;
+        }}
+        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }}
+        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }}
+        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}
+        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }}
+        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }}
+        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }}
 
         /* Badge de Notificação */
-        .badge {{
+        .sidebar-menu .stButton:nth-child(5) > button::after {{
+            content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
+            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
 
         /* Painel Principal: Cards */
         .metric-card {{
             background-color: #1a1a2e; padding: 20px; border-radius: 10px;
-            border-left: 5px solid #4a4a8a; margin-bottom: 10px; height: 120px;
+            border-left: 5px solid #4a4a8a; margin-bottom: 10px; height: 130px;
         }}
-        .metric-card p {{ margin: 0; font-size: 1.1em; color: #a9a9a9; }}
+        .metric-card p {{ margin: 0; font-size: 1.1em; color: #a9a9a9; display: flex; align-items: center;}}
+        .metric-card p i {{ margin-right: 10px; font-size: 0.9em; }}
         .metric-card h3 {{ font-size: 2.2em; color: #ffffff; margin-top: 5px; }}
-        
-        /* Formulários */
-        .stTextInput, .stNumberInput, .stTextArea, .stSelectbox {{
-            background-color: #1a1a2e; border: 1px solid #2e2e54; border-radius: 8px; padding: 5px 10px;
-        }}
         
         /* Outros */
         .stDataFrame, .stDataEditor {{ border: 1px solid #2e2e54; border-radius: 10px; }}
@@ -153,16 +172,16 @@ def pagina_painel_principal():
     df = st.session_state.estoque_df; valor_total = (df['Quantidade em Estoque'] * df['Preço de Custo']).sum()
     itens_alerta = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].shape[0]; total_itens = df.shape[0]
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f'<div class="metric-card"><p>Valor Total do Estoque</p><h3>R$ {valor_total:,.2f}</h3></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="metric-card"><p>Itens em Alerta</p><h3>{itens_alerta}</h3></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="metric-card"><p>Total de Itens Únicos</p><h3>{total_itens}</h3></div>', unsafe_allow_html=True)
+    c1.markdown(f'<div class="metric-card"><p><i class="fa-solid fa-coins"></i>Valor Total do Estoque</p><h3>R$ {valor_total:,.2f}</h3></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="metric-card"><p><i class="fa-solid fa-triangle-exclamation"></i>Itens em Alerta</p><h3>{itens_alerta}</h3></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="metric-card"><p><i class="fa-solid fa-boxes-stacked"></i>Total de Itens Únicos</p><h3>{total_itens}</h3></div>', unsafe_allow_html=True)
     st.subheader("Itens Precisando de Reposição Urgente")
     if (lista_urgente := gerar_lista_de_compras()) is not None:
         st.dataframe(lista_urgente, use_container_width=True, hide_index=True)
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=lambda: st.query_params.update(page="Adicionar_Item"), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
@@ -257,33 +276,24 @@ def pagina_gerenciar_cadastros():
             if st.button("Excluir Fornecedor"): st.session_state.fornecedores.remove(sel); salvar_dados(); st.rerun()
 
 # --- INICIALIZAÇÃO E ROTEAMENTO ---
-if 'estoque_df' not in st.session_state:
+if 'pagina_atual' not in st.session_state:
     carregar_dados()
+    st.session_state.pagina_atual = 'Painel Principal'
     st.session_state.sessao_uso = []
+def set_page(page): st.session_state.pagina_atual = page
 
 # --- RENDERIZAÇÃO DA INTERFACE ---
-query_params = st.query_params.to_dict()
-pagina_atual = query_params.get("page", ["Painel Principal"])[0].replace("_", " ")
-
 with st.sidebar:
-    st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-header"><i class="fa-solid fa-pen-nib sidebar-icon"></i><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
-    
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
     
-    menu_items = {
-        "Painel Principal": "fa-solid fa-chart-simple", "Meu Estoque": "fa-solid fa-box-archive",
-        "Adicionar Item": "fa-solid fa-plus", "Registrar Uso": "fa-solid fa-pen",
-        "Lista de Compras": "fa-solid fa-cart-shopping", "Gerenciar Cadastros": "fa-solid fa-cogs"
-    }
-
-    for page_name, icon_class in menu_items.items():
-        is_active = "active" if pagina_atual == page_name else ""
-        badge_html = f"<span class='badge'>{num_itens_comprar}</span>" if "Lista de Compras" in page_name and num_itens_comprar > 0 else ""
-        page_link = page_name.replace(" ", "_")
-        st.markdown(f'<a href="?page={page_link}" class="nav-item {is_active}" target="_self"><i class="{icon_class} icon"></i><span class="text">{page_name}</span>{badge_html}</a>', unsafe_allow_html=True)
-
+    menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
+    
+    for item in menu_items:
+        st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
+    
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.0 Final</span></div>', unsafe_allow_html=True)
 
@@ -292,9 +302,5 @@ paginas = {
     "Adicionar Item": pagina_adicionar_item, "Registrar Uso": pagina_registrar_uso,
     "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
 }
-if pagina_atual in paginas:
-    paginas[pagina_atual]()
-else:
-    # Página padrão caso o parâmetro da URL seja inválido
-    paginas["Painel Principal"]()
+paginas[st.session_state.pagina_atual]()
 
