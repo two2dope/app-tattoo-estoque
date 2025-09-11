@@ -17,64 +17,47 @@ ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
-def carregar_componentes_visuais(num_itens_alerta=0):
-    # Injeta a folha de estilos do Font Awesome a partir de um CDN
+def carregar_componentes_visuais():
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
     <style>
         /* Ajustes Gerais */
-        .block-container {{ padding-top: 2rem; }}
+        iframe {{ display: none !important; }} /* Oculta o iframe de componentes HTML */
+        .block-container {{ padding-top: 3rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
         
         /* Sidebar */
         [data-testid="stSidebar"] > div:first-child {{
             display: flex; flex-direction: column; height: 100vh;
-            padding: 1rem; overflow: hidden;
+            padding: 1.5rem; overflow: hidden;
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
-        .sidebar-header {{ text-align: center; margin-bottom: 1rem; }}
+        .sidebar-header {{ text-align: center; margin-bottom: 2rem; }}
         .sidebar-icon {{ font-size: 2.5em; margin-bottom: 0.5rem; color: #e0e0e0; }}
         .sidebar-menu {{ flex-grow: 1; }}
-        .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
+        .sidebar-footer {{ text-align: center; color: #a9a9a9; padding-top: 1rem; }}
         .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
         .footer-version {{ font-size: 0.8em; color: #666; display: block; }}
         
-        /* Botões do Menu da Sidebar */
-        .stButton > button {{
-            width: 100%; text-align: left !important;
-            background-color: transparent; color: #e0e0e0; 
-            padding: 10px 15px; margin-bottom: 5px; font-size: 1.0em;
-            transition: all 0.2s ease-in-out; white-space: nowrap; 
-            overflow: hidden; text-overflow: ellipsis; 
+        /* Menu da Sidebar (HTML) */
+        .nav-item {{
             display: flex; align-items: center; justify-content: space-between;
-            border-radius: 8px;
-            border: 1px solid #2e2e54;
+            padding: 12px 15px; margin-bottom: 8px; border-radius: 8px;
+            font-size: 1.0em; color: #a9a9a9; text-decoration: none;
+            transition: all 0.2s ease-in-out; cursor: pointer;
+            background-color: transparent; border: 1px solid transparent;
         }}
-        .stButton > button:hover {{ background-color: #162447; color: #ffffff; border-color: #4a4a8a; }}
-        .stButton > button:focus:not(:hover) {{
-            background-color: #2e2e54; color: white; border-color: #4a4a8a; font-weight: bold;
-        }}
-
-        /* Ícones do Font Awesome via Pseudo-elementos */
-        .stButton > button::before {{
-            font-family: "Font Awesome 6 Free"; font-weight: 900;
-            margin-right: 12px; font-size: 0.9em;
-        }}
-        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }}
-        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }}
-        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}
-        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }}
-        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }}
-        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }}
+        .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
+        .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; border: 1px solid #4a4a8a;}}
+        .nav-item .icon {{ margin-right: 12px; font-size: 0.9em; width: 20px; text-align: center;}}
+        .nav-item .text {{ flex-grow: 1; }}
 
         /* Badge de Notificação */
-        .sidebar-menu .stButton:nth-child(5) > button::after {{
-            content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
+        .badge {{
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
-            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
 
         /* Painel Principal: Cards */
@@ -176,7 +159,7 @@ def pagina_painel_principal():
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True); c2.button("Adicionar Novo Item", on_click=lambda: set_page("Adicionar Item"), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
