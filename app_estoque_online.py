@@ -56,7 +56,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             border-radius: 8px; border: 1px solid transparent;
         }}
         .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
-        .stButton > button:focus {{
+        .stButton > button:focus:not(:hover) {{
             background-color: #2e2e54; color: white; border: 1px solid #4a4a8a; font-weight: bold;
         }}
 
@@ -95,9 +95,8 @@ def carregar_componentes_visuais(num_itens_alerta=0):
 
         /* Responsividade */
         @media (max-width: 768px) {{
-            [data-testid="stSidebar"] > div:first-child {{
-                transform: translateX(0) !important;
-                width: 100%;
+            [data-testid="stSidebar"] {{
+                display: none;
             }}
         }}
     </style>
