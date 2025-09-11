@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date, datetime
 from fpdf import FPDF
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import os
+import json
 
 # --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(
@@ -12,94 +12,135 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- CONSTANTES DE ARQUIVOS ---
+ESTOQUE_FILE = 'estoque.csv'
+CADASTROS_FILE = 'cadastros.json'
+
 # --- CSS E COMPONENTES VISUAIS ---
 def carregar_componentes_visuais(num_itens_alerta=0):
+    # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
+    
     st.markdown(f"""
     <style>
-        /* ... (CSS completo da v14 aqui, sem alterações) ... */
+        /* Ajustes Gerais */
         .block-container {{ padding-top: 3rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
+        h1, h2, h3, h4 {{ color: #e0e0e0; }}
+        
+        /* Sidebar */
         [data-testid="stSidebar"] > div:first-child {{
             display: flex; flex-direction: column; height: 100vh;
             padding: 1rem; overflow: hidden;
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
+        .sidebar-header {{ margin-bottom: 1rem; }}
+        .sidebar-menu {{ flex-grow: 1; }}
+        .sidebar-footer {{ text-align: center; color: #a9a9a9; }}
+        .footer-brand {{ font-size: 0.9em; font-weight: bold; }}
+        .footer-version {{ font-size: 0.8em; color: #666; }}
+        
+        /* Botões do Menu da Sidebar (Condensado) */
+        .stButton > button {{
+            width: 100%; text-align: left !important; border: none; 
+            background-color: transparent; color: #e0e0e0; 
+            padding: 10px 15px;
+            margin-bottom: 4px;
+            font-size: 1.0em;
+            transition: all 0.2s ease-in-out; white-space: nowrap; 
+            overflow: hidden; text-overflow: ellipsis; 
+            display: flex; align-items: center; justify-content: space-between;
+            border-radius: 8px;
+        }}
+        .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
+        
+        /* Ícones do Font Awesome via Pseudo-elementos */
+        .stButton > button::before {{
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            margin-right: 12px;
+            font-size: 0.9em;
+        }}
+        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }} /* fa-chart-simple */
+        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }} /* fa-box-archive */
+        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}   /* fa-plus */
+        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }} /* fa-pen */
+        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }} /* fa-cart-shopping */
+        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }} /* fa-cogs */
+
+        /* Badge de Notificação */
         .sidebar-menu .stButton:nth-child(5) > button::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
             display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
+
+        /* Painel Principal: Cards */
         .metric-card {{
             background-color: #1a1a2e; padding: 20px; border-radius: 10px;
             border-left: 5px solid #4a4a8a; margin-bottom: 10px; height: 120px;
         }}
-        /* ... (restante do CSS) ... */
+        .metric-card p {{ margin: 0; font-size: 1.1em; color: #a9a9a9; }}
+        .metric-card h3 {{ font-size: 2.2em; color: #ffffff; margin-top: 5px; }}
+        
+        /* Formulários */
+        .stTextInput, .stNumberInput, .stTextArea, .stSelectbox {{
+            background-color: #1a1a2e; border: 1px solid #2e2e54; border-radius: 8px; padding: 5px 10px;
+        }}
+        
+        /* Outros */
+        .stDataFrame, .stDataEditor {{ border: 1px solid #2e2e54; border-radius: 10px; }}
+        .stDivider div {{ background-color: #2e2e54; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE CONEXÃO COM GOOGLE SHEETS ---
-def connect_to_google_sheets():
-    try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        st.error(f"Erro ao conectar com o Google Sheets: {e}")
-        st.warning("Verifique se as credenciais [gcp_service_account] estão configuradas nos Segredos (Secrets) do seu app.")
-        return None
+# --- FUNÇÕES DE PERSISTÊNCIA ---
+def salvar_dados():
+    st.session_state['estoque_df'].to_csv(ESTOQUE_FILE, index=False)
+    cadastros = {
+        'categorias': st.session_state.categorias, 'fornecedores': st.session_state.fornecedores,
+        'colunas_visiveis': st.session_state.get('colunas_visiveis', [])
+    }
+    with open(CADASTROS_FILE, 'w', encoding='utf-8') as f: json.dump(cadastros, f)
 
-def carregar_dados_gsheets(client):
-    try:
-        spreadsheet = client.open("BaseDeDados_Estoque")
-        sheet = spreadsheet.worksheet("estoque")
-        records = sheet.get_all_records()
-        
-        colunas_numericas = ["ID", "Quantidade em Estoque", "Estoque Mínimo", "Preço de Custo"]
-        colunas_texto = ["Nome do Item", "Marca/Modelo", "Tipo/Especificação", "Categoria", "Fornecedor Principal", "Unidade de Medida", "Data da Última Compra", "Observações"]
-
-        if records:
-            df = pd.DataFrame(records)
-            for col in colunas_numericas:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            for col in colunas_texto:
-                df[col] = df[col].astype(str)
-            st.session_state.estoque_df = df
-        else:
-            st.session_state.estoque_df = pd.DataFrame(columns=colunas_numericas + colunas_texto)
-            
-        st.session_state.categorias = ["Agulhas", "Tintas", "Descartáveis", "Higiene"]
-        st.session_state.fornecedores = ["Art Prime", "Tattoo Loja", "Fornecedor Local"]
-        st.session_state.colunas_visiveis = ['Nome do Item', 'Marca/Modelo', 'Categoria', 'Quantidade em Estoque']
-    except Exception as e:
-        st.error(f"Erro ao carregar dados da planilha: {e}")
-        st.stop()
-
-def salvar_dados_gsheets(client):
-    try:
-        spreadsheet = client.open("BaseDeDados_Estoque")
-        sheet = spreadsheet.worksheet("estoque")
-        df_to_save = st.session_state.estoque_df.fillna('')
-        data_to_upload = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-        sheet.clear(); sheet.update(data_to_upload, 'A1')
-    except Exception as e:
-        st.error(f"Não foi possível salvar os dados na planilha: {e}")
+def carregar_dados():
+    colunas = ["ID", "Nome do Item", "Marca/Modelo", "Tipo/Especificação", "Categoria", "Fornecedor Principal", "Quantidade em Estoque", "Estoque Mínimo", "Unidade de Medida", "Preço de Custo", "Data da Última Compra", "Observações"]
+    if os.path.exists(ESTOQUE_FILE) and os.path.exists(CADASTROS_FILE):
+        st.session_state.estoque_df = pd.read_csv(ESTOQUE_FILE)
+        with open(CADASTROS_FILE, 'r', encoding='utf-8') as f:
+            cadastros = json.load(f)
+            st.session_state.categorias = cadastros.get('categorias', [])
+            st.session_state.fornecedores = cadastros.get('fornecedores', [])
+            st.session_state.colunas_visiveis = cadastros.get('colunas_visiveis', ['Nome do Item', 'Marca/Modelo', 'Categoria', 'Quantidade em Estoque'])
+    else:
+        st.session_state.update({
+            'categorias': ["Agulhas", "Tintas", "Descartáveis", "Higiene"],
+            'fornecedores': ["Art Prime", "Tattoo Loja", "Fornecedor Local"],
+            'colunas_visiveis': ['Nome do Item', 'Marca/Modelo', 'Categoria', 'Quantidade em Estoque'],
+            'estoque_df': pd.DataFrame(columns=colunas)
+        })
+        def adicionar_item_inicial(nome, marca, especificacao, categoria, fornecedor, quantidade, estoque_minimo, unidade, preco_custo, observacoes="", save=True):
+            df = st.session_state.estoque_df; novo_id = 1 if df.empty else df["ID"].max() + 1
+            novo_item = pd.DataFrame([{"ID": novo_id, "Nome do Item": nome, "Marca/Modelo": marca, "Tipo/Especificação": especificacao, "Categoria": categoria, "Fornecedor Principal": fornecedor, "Quantidade em Estoque": float(quantidade), "Estoque Mínimo": int(estoque_minimo), "Unidade de Medida": unidade, "Preço de Custo": float(preco_custo), "Data da Última Compra": date.today().strftime("%Y-%m-%d"), "Observações": observacoes}])
+            st.session_state.estoque_df = pd.concat([df, novo_item], ignore_index=True)
+            if save: salvar_dados()
+        adicionar_item_inicial("Cartucho", "Cheyenne", "7RL", "Agulhas", "Art Prime", 25, 30, "Unidade", 3.00, save=False)
+        adicionar_item_inicial("Tinta Preta", "Dynamic", "Triple Black", "Tintas", "Tattoo Loja", 240, 100, "ml", 0.37, save=False)
+        adicionar_item_inicial("Luva Nitrílica", "Talge", "M", "Descartáveis", "Fornecedor Local", 40, 50, "Par", 0.80, save=True)
 
 # --- FUNÇÕES DE LÓGICA ---
 def adicionar_item(nome, marca, especificacao, categoria, fornecedor, quantidade, estoque_minimo, unidade, preco_custo, observacoes=""):
     df = st.session_state.estoque_df; novo_id = 1 if df.empty else df["ID"].max() + 1
     novo_item = pd.DataFrame([{"ID": novo_id, "Nome do Item": nome, "Marca/Modelo": marca, "Tipo/Especificação": especificacao, "Categoria": categoria, "Fornecedor Principal": fornecedor, "Quantidade em Estoque": float(quantidade), "Estoque Mínimo": int(estoque_minimo), "Unidade de Medida": unidade, "Preço de Custo": float(preco_custo), "Data da Última Compra": date.today().strftime("%Y-%m-%d"), "Observações": observacoes}])
     st.session_state.estoque_df = pd.concat([df, novo_item], ignore_index=True)
-    salvar_dados_gsheets(st.session_state.gsheets_client)
+    salvar_dados()
 
 def registrar_uso(item_id, quantidade_usada):
     df = st.session_state.estoque_df; idx = df.index[df['ID'] == item_id][0]
     df.loc[idx, 'Quantidade em Estoque'] -= float(quantidade_usada)
     st.session_state.estoque_df = df
-    salvar_dados_gsheets(st.session_state.gsheets_client)
+    salvar_dados()
 
 def gerar_lista_de_compras():
     df = st.session_state.estoque_df
@@ -143,7 +184,7 @@ def pagina_meu_estoque():
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
         if colunas_selecionadas != st.session_state.get('colunas_visiveis'):
-            st.session_state.colunas_visiveis = colunas_selecionadas; salvar_dados_gsheets(st.session_state.gsheets_client); st.rerun()
+            st.session_state.colunas_visiveis = colunas_selecionadas; salvar_dados(); st.rerun()
     
     df_editavel = st.session_state.estoque_df.copy(); df_editavel["Excluir"] = False
     col_config = {
@@ -161,7 +202,7 @@ def pagina_meu_estoque():
         df_original = st.session_state.estoque_df.set_index("ID")
         df_original.update(df_alterado); st.session_state.estoque_df = df_original.reset_index()
         if itens_para_excluir: st.session_state.estoque_df = st.session_state.estoque_df[~st.session_state.estoque_df['ID'].isin(itens_para_excluir)]
-        salvar_dados_gsheets(st.session_state.gsheets_client); st.success("Alterações salvas com sucesso!"); st.rerun()
+        salvar_dados(); st.success("Alterações salvas com sucesso!"); st.rerun()
     if not st.session_state.estoque_df.empty:
         pdf_data = gerar_pdf_relatorio(st.session_state.estoque_df.drop(columns=['ID']), "Relatório de Estoque Completo")
         c2.download_button("Baixar Relatório PDF", pdf_data, f"relatorio_estoque_{date.today()}.pdf", "application/pdf", use_container_width=True)
@@ -209,46 +250,52 @@ def pagina_lista_compras():
 
 def pagina_gerenciar_cadastros():
     st.header("Gerenciar Cadastros"); c1, c2 = st.columns(2)
-    # Gerenciar Categoria e Fornecedor precisa ser adaptado para GSheets se necessário
-    # Por ora, mantemos em session_state (não persistente entre sessões)
     with c1:
-        st.subheader("Categorias (Temporário)")
-        st.write(st.session_state.categorias)
+        st.subheader("Categorias")
+        with st.form("nova_cat_form", clear_on_submit=True):
+            nova = st.text_input("Nova Categoria")
+            if st.form_submit_button("Adicionar"):
+                if nova and nova not in st.session_state.categorias:
+                    st.session_state.categorias.append(nova); salvar_dados(); st.rerun()
+                else: st.error("Inválida ou já existe.")
+        if st.session_state.categorias:
+            sel = st.selectbox("Excluir", st.session_state.categorias, key="del_cat")
+            if st.button("Excluir Categoria"): st.session_state.categorias.remove(sel); salvar_dados(); st.rerun()
     with c2:
-        st.subheader("Fornecedores (Temporário)")
-        st.write(st.session_state.fornecedores)
+        st.subheader("Fornecedores")
+        with st.form("novo_forn_form", clear_on_submit=True):
+            nova = st.text_input("Novo Fornecedor")
+            if st.form_submit_button("Adicionar"):
+                if nova and nova not in st.session_state.fornecedores:
+                    st.session_state.fornecedores.append(nova); salvar_dados(); st.rerun()
+                else: st.error("Inválido ou já existe.")
+        if st.session_state.fornecedores:
+            sel = st.selectbox("Excluir", st.session_state.fornecedores, key="del_forn")
+            if st.button("Excluir Fornecedor"): st.session_state.fornecedores.remove(sel); salvar_dados(); st.rerun()
 
 # --- INICIALIZAÇÃO E ROTEAMENTO ---
-def main():
-    if 'pagina_atual' not in st.session_state:
-        st.session_state.gsheets_client = connect_to_google_sheets()
-        if st.session_state.gsheets_client:
-            carregar_dados_gsheets(st.session_state.gsheets_client)
-            st.session_state.pagina_atual = 'Painel Principal'
-            st.session_state.sessao_uso = []
-        else:
-            st.stop()
-    
-    def set_page(page): st.session_state.pagina_atual = page
-    
-    with st.sidebar:
-        st.markdown('<div class="sidebar-header"><h3>✒️ Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
-        num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
-        carregar_componentes_visuais(num_itens_comprar)
-        menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
-        for item in menu_items:
-            st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 14.1 Final</span></div>', unsafe_allow_html=True)
-    
-    paginas = {
-        "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
-        "Adicionar Item": pagina_adicionar_item, "Registrar Uso": pagina_registrar_uso,
-        "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
-    }
-    paginas[st.session_state.pagina_atual]()
+if 'pagina_atual' not in st.session_state:
+    carregar_dados()
+    st.session_state.pagina_atual = 'Painel Principal'
+    st.session_state.sessao_uso = []
+def set_page(page): st.session_state.pagina_atual = page
 
-if __name__ == "__main__":
-    main()
+# --- RENDERIZAÇÃO DA INTERFACE ---
+with st.sidebar:
+    st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
+    carregar_componentes_visuais(num_itens_comprar)
+    menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
+    for item in menu_items:
+        st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 14.0 Final</span></div>', unsafe_allow_html=True)
+
+paginas = {
+    "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
+    "Adicionar Item": pagina_adicionar_item, "Registrar Uso": pagina_registrar_uso,
+    "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
+}
+paginas[st.session_state.pagina_atual]()
 
