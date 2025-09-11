@@ -18,7 +18,6 @@ CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
 def carregar_componentes_visuais(num_itens_alerta=0):
-    # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
@@ -50,7 +49,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             overflow: hidden; text-overflow: ellipsis; 
             display: flex; align-items: center; justify-content: space-between;
             border-radius: 8px;
-            border: 1px solid #2e2e54; /* Moldura visível */
+            border: 1px solid #2e2e54;
         }}
         .stButton > button:hover {{ background-color: #162447; color: #ffffff; border-color: #4a4a8a; }}
         .stButton > button:focus:not(:hover) {{
@@ -290,7 +289,7 @@ with st.sidebar:
         st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.1 Final</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.2 Final</span></div>', unsafe_allow_html=True)
 
 paginas = {
     "Painel Principal": pagina_painel_principal, "Meu Estoque": pagina_meu_estoque,
