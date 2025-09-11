@@ -17,61 +17,46 @@ ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
-def carregar_componentes_visuais(num_itens_alerta=0):
+def carregar_componentes_visuais():
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     st.markdown(f"""
     <style>
         /* Ajustes Gerais */
-        .block-container {{ padding-top: 2rem; }}
+        iframe {{ display: none !important; }}
+        .block-container {{ padding-top: 3rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
         
         /* Sidebar */
         [data-testid="stSidebar"] > div:first-child {{
             display: flex; flex-direction: column; height: 100vh;
-            padding: 1rem; overflow: hidden; width: 320px;
+            padding: 1.5rem; overflow: hidden; width: 320px;
             background-color: #1a1a2e; border-right: 1px solid #2e2e54;
         }}
-        .sidebar-header {{ text-align: center; margin-bottom: 1.5rem; }}
+        .sidebar-header {{ text-align: center; margin-bottom: 2rem; }}
         .sidebar-icon {{ font-size: 2.5em; margin-bottom: 0.5rem; color: #e0e0e0; }}
         .sidebar-menu {{ flex-grow: 1; }}
         .sidebar-footer {{ text-align: left; color: #a9a9a9; padding: 1rem; border-radius: 8px; background-color: #0f0f1a;}}
         .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
         .footer-version {{ font-size: 0.8em; color: #666; display: block; }}
         
-        /* Botões do Menu da Sidebar */
-        .stButton > button {{
-            width: 100%; text-align: left !important;
-            background-color: transparent; color: #a9a9a9; 
-            padding: 10px 15px; margin-bottom: 5px; font-size: 1.0em;
-            transition: all 0.2s ease-in-out; white-space: nowrap; 
-            overflow: hidden; text-overflow: ellipsis; 
+        /* Menu da Sidebar (HTML) */
+        .nav-item {{
             display: flex; align-items: center; justify-content: space-between;
-            border-radius: 8px; border: 1px solid transparent;
+            padding: 12px 15px; margin-bottom: 8px; border-radius: 8px;
+            font-size: 1.0em; color: #a9a9a9; text-decoration: none;
+            transition: all 0.2s ease-in-out; cursor: pointer;
+            background-color: transparent; border: 1px solid transparent;
         }}
-        .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
-        .stButton > button:focus:not(:hover) {{
-            background-color: #2e2e54; color: white; border-color: #4a4a8a; font-weight: bold;
-        }}
-
-        /* Ícones do Font Awesome */
-        .stButton > button::before {{
-            font-family: "Font Awesome 6 Free"; font-weight: 900;
-            margin-right: 12px; font-size: 0.9em;
-        }}
-        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }}
-        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }}
-        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}
-        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }}
-        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }}
-        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }}
+        .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
+        .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; border: 1px solid #4a4a8a;}}
+        .nav-item .icon {{ margin-right: 12px; font-size: 0.9em; width: 20px; text-align: center;}}
+        .nav-item .text {{ flex-grow: 1; }}
 
         /* Badge de Notificação */
-        .sidebar-menu .stButton:nth-child(5) > button::after {{
-            content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
+        .badge {{
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
-            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
 
         /* Painel Principal: Cards */
@@ -80,7 +65,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             border-left: 5px solid #4a4a8a; margin-bottom: 10px; height: 130px;
         }}
         .metric-card p {{ margin: 0; font-size: 1.1em; color: #a9a9a9; display: flex; align-items: center;}}
-        .metric-card p i {{ margin-right: 10px; font-size: 0.9em; }}
+        .metric-card p i {{ margin-right: 10px; font-size: 1.2em; color: #4a4a8a; }}
         .metric-card h3 {{ font-size: 2.2em; color: #ffffff; margin-top: 5px; }}
         
         /* Outros */
@@ -173,7 +158,7 @@ def pagina_painel_principal():
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True); c2.button("Adicionar Novo Item", on_click=lambda: st.query_params.update(page="Adicionar_Item"), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
@@ -272,20 +257,30 @@ if 'pagina_atual' not in st.session_state:
     carregar_dados()
     st.session_state.pagina_atual = 'Painel Principal'
     st.session_state.sessao_uso = []
-def set_page(page): st.session_state.pagina_atual = page
 
 # --- RENDERIZAÇÃO DA INTERFACE ---
+query_params = st.query_params.to_dict()
+pagina_atual = query_params.get("page", ["Painel Principal"])[0].replace("_", " ")
+
 with st.sidebar:
     st.markdown('<div class="sidebar-header"><i class="fa-solid fa-skull sidebar-icon"></i><h3>Tattoo Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
-    carregar_componentes_visuais(num_itens_comprar)
+    carregar_componentes_visuais()
     
-    menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
-    
-    for item in menu_items:
-        st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
-    
+    menu_items = {
+        "Painel Principal": "fa-solid fa-chart-simple", "Meu Estoque": "fa-solid fa-box-archive",
+        "Adicionar Item": "fa-solid fa-plus", "Registrar Uso": "fa-solid fa-pen",
+        "Lista de Compras": "fa-solid fa-cart-shopping", "Gerenciar Cadastros": "fa-solid fa-cogs"
+    }
+
+    for page_name, icon_class in menu_items.items():
+        is_active = "active" if pagina_atual == page_name else ""
+        badge_html = f"<span class='badge'>{num_itens_comprar}</span>" if "Lista de Compras" in page_name and num_itens_comprar > 0 else ""
+        page_link = page_name.replace(" ", "_")
+        st.markdown(f'<a href="?page={page_link}" class="nav-item {is_active}" target="_self"><i class="{icon_class} icon"></i><span class="text">{page_name}</span>{badge_html}</a>', unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 16.0 Final</span></div>', unsafe_allow_html=True)
 
@@ -294,5 +289,8 @@ paginas = {
     "Adicionar Item": pagina_adicionar_item, "Registrar Uso": pagina_registrar_uso,
     "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
 }
-paginas[st.session_state.pagina_atual]()
+if pagina_atual in paginas:
+    paginas[pagina_atual]()
+else:
+    paginas["Painel Principal"]()
 
