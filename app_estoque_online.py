@@ -289,7 +289,7 @@ def set_page(page): st.session_state.pagina_atual = page
 
 # --- RENDERIZAÇÃO DA INTERFACE ---
 with st.sidebar:
-    st.markdown('<div class="sidebar-header"><i class="fa-solid fa-skull sidebar-icon"></i><h3>Tattoo Estoque</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-header"><span class="sidebar-icon">💀</span><h3>Tattoo Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
