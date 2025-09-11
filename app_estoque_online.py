@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from gspread_pandas import Spread, Client
+# A linha "from gspread_pandas import Spread, Client" foi REMOVIDA
 from google.oauth2.service_account import Credentials
 import gspread
 
@@ -161,7 +161,8 @@ def save_stock_data(client, df, sheet_name="BaseDeDados_Estoque", worksheet_name
         worksheet = spreadsheet.worksheet(worksheet_name)
         worksheet.clear()
         # Converte o DataFrame para lista de listas para o gspread
-        data_to_save = [df.columns.values.tolist()] + df.values.tolist()
+        df_to_save = df.fillna('') # Substitui NaN por string vazia para evitar erros
+        data_to_save = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         worksheet.update(data_to_save)
         st.cache_data.clear() # Limpa o cache para recarregar os dados
     except Exception as e:
@@ -179,7 +180,8 @@ else:
 # Por simplicidade, vamos gerenciá-los a partir dos dados existentes
 def get_unique_values(column_name):
     if not st.session_state.stock_df.empty and column_name in st.session_state.stock_df.columns:
-        return sorted(st.session_state.stock_df[column_name].unique().tolist())
+        # Retorna valores únicos sem nulos e ordenados
+        return sorted([x for x in st.session_state.stock_df[column_name].unique() if pd.notna(x) and x != ''])
     return []
 
 
@@ -258,9 +260,13 @@ def page_my_stock():
         return
 
     # Ferramentas de Busca e Filtro
-    search_query = st.text_input("Buscar por nome, marca ou tipo...")
-    categories = ["Todas as Categorias"] + get_unique_values("Categoria")
-    selected_category = st.selectbox("Filtrar por Categoria", options=categories)
+    col1, col2 = st.columns([3,1])
+    with col1:
+        search_query = st.text_input("Buscar por nome, marca ou tipo...", label_visibility="collapsed", placeholder="Buscar por nome, marca ou tipo...")
+    with col2:
+        categories = ["Todas as Categorias"] + get_unique_values("Categoria")
+        selected_category = st.selectbox("Filtrar por Categoria", options=categories, label_visibility="collapsed")
+
 
     filtered_df = st.session_state.stock_df.copy()
     if search_query:
@@ -285,7 +291,8 @@ def page_my_stock():
         filtered_df[cols_to_display],
         key="stock_editor",
         num_rows="dynamic",
-        hide_index=True
+        hide_index=True,
+        use_container_width=True
     )
     
     if st.button("Salvar Alterações", type="primary"):
@@ -317,9 +324,15 @@ def page_add_item():
         with c1:
             nome = st.text_input("Nome do Item", placeholder="Ex: Cartucho Descartável")
             tipo = st.text_input("Tipo/Especificação", placeholder="Ex: 7RL Bold 0.35mm")
-            categoria = st.selectbox("Categoria", options=get_unique_values("Categoria") + ["Nova Categoria..."])
-            if categoria == "Nova Categoria...":
-                categoria = st.text_input("Nome da Nova Categoria")
+            
+            # Lógica para adicionar nova categoria
+            categorias_existentes = get_unique_values("Categoria")
+            categoria_selecionada = st.selectbox("Categoria", options=categorias_existentes + ["Adicionar Nova Categoria..."])
+            if categoria_selecionada == "Adicionar Nova Categoria...":
+                nova_categoria = st.text_input("Nome da Nova Categoria")
+                categoria_final = nova_categoria
+            else:
+                categoria_final = categoria_selecionada
 
             qtd = st.number_input("Qtd. em Estoque", min_value=0.0, step=0.1, format="%.2f")
             unidade = st.selectbox("Unidade de Medida", options=["Unidade", "Caixa", "Frasco", "Par", "Rolo"])
@@ -327,8 +340,16 @@ def page_add_item():
         with c2:
             marca = st.text_input("Marca/Modelo", placeholder="Ex: Cheyenne Craft")
             sku = st.text_input("Código/SKU (Opcional)")
-            fornecedor = st.selectbox("Fornecedor Principal", options=get_unique_values("Fornecedor Principal"))
             
+            # Lógica para adicionar novo fornecedor
+            fornecedores_existentes = get_unique_values("Fornecedor Principal")
+            fornecedor_selecionado = st.selectbox("Fornecedor Principal", options=fornecedores_existentes + ["Adicionar Novo Fornecedor..."])
+            if fornecedor_selecionado == "Adicionar Novo Fornecedor...":
+                novo_fornecedor = st.text_input("Nome do Novo Fornecedor")
+                fornecedor_final = novo_fornecedor
+            else:
+                fornecedor_final = fornecedor_selecionado
+
             minimo = st.number_input("Estoque Mínimo", min_value=0, step=1)
             custo = st.number_input("Preço de Custo (R$)", min_value=0.0, format="%.2f")
 
@@ -337,7 +358,7 @@ def page_add_item():
         submit_button = st.form_submit_button(label="Salvar Item")
 
         if submit_button:
-            if not nome or not categoria:
+            if not nome or not categoria_final:
                 st.error("Nome do Item e Categoria são obrigatórios.")
             else:
                 new_id = (st.session_state.stock_df['ID'].max() + 1) if not st.session_state.stock_df.empty else 1
@@ -346,8 +367,8 @@ def page_add_item():
                     "Nome do Item": nome,
                     "Marca/Modelo": marca,
                     "Tipo/Especificação": tipo,
-                    "Categoria": categoria,
-                    "Fornecedor Principal": fornecedor,
+                    "Categoria": categoria_final,
+                    "Fornecedor Principal": fornecedor_final,
                     "Quantidade em Estoque": qtd,
                     "Estoque Mínimo": minimo,
                     "Unidade de Medida": unidade,
@@ -380,7 +401,7 @@ def page_register_usage():
             axis=1
         ).tolist()
         
-        selected_item_str = st.selectbox("Buscar item no estoque...", [""] + item_names)
+        selected_item_str = st.selectbox("Buscar item no estoque...", [""] + item_names, label_visibility="collapsed")
 
         if selected_item_str:
             # Encontrar o índice do item selecionado
@@ -406,13 +427,15 @@ def page_register_usage():
                 st.write(f"- {item['quantity']}x {item['name']}")
             
             st.markdown("---")
-            if st.button("Confirmar Uso", type="primary"):
+            if st.button("Confirmar Uso", type="primary", use_container_width=True):
                 for item_to_use in st.session_state.session_items:
                     # Encontra o item no DF principal e subtrai a quantidade
                     item_index = st.session_state.stock_df[st.session_state.stock_df['ID'] == item_to_use['id']].index
                     if not item_index.empty:
-                        current_qty = st.session_state.stock_df.loc[item_index[0], 'Quantidade em Estoque']
-                        st.session_state.stock_df.loc[item_index[0], 'Quantidade em Estoque'] = current_qty - item_to_use['quantity']
+                        idx = item_index[0]
+                        current_qty = st.session_state.stock_df.loc[idx, 'Quantidade em Estoque']
+                        new_qty = float(current_qty) - float(item_to_use['quantity'])
+                        st.session_state.stock_df.loc[idx, 'Quantidade em Estoque'] = new_qty
 
                 save_stock_data(client, st.session_state.stock_df)
                 st.success("Baixa no estoque realizada com sucesso!")
@@ -434,11 +457,14 @@ def page_shopping_list():
         return
 
     # Calcula a sugestão de compra (pode ser ajustada)
-    shopping_list_df['Qtd. a Comprar (Sugestão)'] = shopping_list_df['Estoque Mínimo'] * 2 - shopping_list_df['Quantidade em Estoque']
+    shopping_list_df['Qtd. a Comprar (Sugestão)'] = shopping_list_df.apply(
+        lambda row: f"{max(0, row['Estoque Mínimo'] - row['Quantidade em Estoque'])} {row['Unidade de Medida']}(s)", 
+        axis=1
+    )
     
     # Exibe a lista
     st.dataframe(
-        shopping_list_df[['Nome do Item', 'Marca/Modelo', 'Fornecedor Principal', 'Estoque Mínimo', 'Quantidade em Estoque', 'Qtd. a Comprar (Sugestão)']],
+        shopping_list_df[['Nome do Item', 'Marca/Modelo', 'Fornecedor Principal', 'Quantidade em Estoque', 'Estoque Mínimo', 'Qtd. a Comprar (Sugestão)']],
         hide_index=True,
         use_container_width=True
     )
@@ -456,14 +482,22 @@ def page_shopping_list():
 # --- 6. FORNECEDORES ---
 def page_suppliers():
     st.title("Gerenciar Fornecedores")
-    st.warning("Funcionalidade em desenvolvimento. No momento, os fornecedores são gerenciados a partir dos itens existentes no estoque.")
-    # Futuramente, pode-se criar uma aba "Fornecedores" na planilha e gerenciar aqui
+    
+    st.subheader("Adicionar Novo Fornecedor")
+    # Esta funcionalidade não salva em um local persistente ainda
+    # Apenas ilustra como a UI funcionaria
+    with st.form("new_supplier_form"):
+        new_supplier_name = st.text_input("Nome do Fornecedor")
+        submitted = st.form_submit_button("+")
+        if submitted and new_supplier_name:
+            st.success(f"Fornecedor '{new_supplier_name}' adicionado à sessão atual.")
+            # Lógica para adicionar a uma lista temporária ou salvar na planilha seria aqui
     
     st.subheader("Fornecedores Cadastrados")
     suppliers = get_unique_values("Fornecedor Principal")
     if suppliers:
         for supplier in suppliers:
-            st.write(f"- {supplier}")
+            st.markdown(f"<div style='background-color:#334155; padding: 10px; border-radius: 5px; margin-bottom: 5px;'>{supplier}</div>", unsafe_allow_html=True)
     else:
         st.info("Nenhum fornecedor cadastrado.")
 
@@ -472,7 +506,6 @@ def page_suppliers():
 # NAVEGAÇÃO PRINCIPAL (SIDEBAR)
 # =============================================================================
 
-# Dicionário de páginas
 PAGES = {
     "Painel Principal": ("fa-solid fa-house", page_dashboard),
     "Meu Estoque": ("fa-solid fa-box-archive", page_my_stock),
@@ -486,25 +519,32 @@ with st.sidebar:
     st.title("Studio Stock")
     st.markdown("---")
 
-    # Inicializa a página
     if "page" not in st.session_state:
         st.session_state.page = "Painel Principal"
 
+    # Lógica para contar itens na lista de compras para notificação
+    df_temp = st.session_state.get('stock_df', pd.DataFrame())
+    if not df_temp.empty:
+        items_in_alert_count = df_temp[df_temp['Quantidade em Estoque'] <= df_temp['Estoque Mínimo']].shape[0]
+    else:
+        items_in_alert_count = 0
+
     # Cria os botões de navegação
     for page_name, (icon_class, _) in PAGES.items():
-        # Lógica para destacar o botão ativo
-        button_class = "st-emotion-cache-1v0mbdj e115fcil2" if st.session_state.page == page_name else ""
-        if st.button(f'<i class="{icon_class}"></i> &nbsp; {page_name}', use_container_width=True, key=f"nav_{page_name}"):
+        label = f'<i class="{icon_class}"></i> &nbsp; {page_name}'
+        # Adiciona o badge de notificação
+        if page_name == "Lista de Compras" and items_in_alert_count > 0:
+            label += f' <span style="background-color: red; color: white; border-radius: 50%; padding: 2px 8px; font-size: 0.8em; margin-left: 10px;">{items_in_alert_count}</span>'
+        
+        if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_name}"):
             st.session_state.page = page_name
             st.rerun()
 
-    # Informações de versão no rodapé da sidebar
-    st.markdown("---")
+    st.markdown("---", unsafe_allow_html=True)
     st.info("Versão 1.0\n\nFeito para estúdios modernos.")
 
-
-# Chama a função da página selecionada para renderizar o conteúdo
-if client: # Só renderiza as páginas se a conexão for bem-sucedida
+# Executa a função da página atual
+if client: 
     page_icon, page_function = PAGES[st.session_state.page]
     page_function()
 else:
