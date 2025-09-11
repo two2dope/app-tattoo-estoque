@@ -20,6 +20,7 @@ st.set_page_config(
 # --- CONSTANTES GLOBAIS ---
 ESTOQUE_FILE = 'estoque.csv'
 CADASTROS_FILE = 'cadastros.json'
+APP_VERSION = "2.4"
 
 # Define as colunas e seus tipos de dados para garantir consistência
 COLUNAS_ESTOQUE = [
@@ -47,42 +48,41 @@ def injetar_estilos(num_itens_alerta=0):
 
         /* Layout da Sidebar para ocupar 100% da altura e evitar scroll */
         [data-testid="stSidebar"] > div:first-child {{
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden; /* Previne a barra de rolagem principal */
+            display: flex; flex-direction: column; height: 100vh;
+            overflow: hidden; background-color: #1a1a2e;
         }}
+        .sidebar-menu {{ flex-grow: 1; overflow-y: auto; }}
 
-        .sidebar-content {{
-            flex-grow: 1; /* Faz o conteúdo do menu crescer */
-            overflow-y: auto; /* Adiciona scroll apenas se o menu for muito grande */
-        }}
+        /* Header da Sidebar */
+        .sidebar-header {{ text-align: center; padding: 1.5rem 0; }}
+        .sidebar-header .main-icon {{ font-size: 3rem; color: #ffffff; margin-bottom: 0.5rem; }}
+        .sidebar-header h3 {{ color: #ffffff; font-weight: bold; margin: 0; }}
 
-        /* Título da Sidebar */
-        .sidebar-header {{
-            text-align: center; padding: 1rem 0;
-            border-bottom: 1px solid #2e2e54; margin-bottom: 1rem;
-        }}
-        .sidebar-header h3 {{ color: #ffffff; font-weight: bold; }}
-
-        /* Ícones Font Awesome nos botões da sidebar */
+        /* Ícones dos Botões da Sidebar */
         .stButton > button::before {{
             font-family: "Font Awesome 6 Free"; font-weight: 900;
             margin-right: 12px; font-size: 1.1em;
         }}
-        /* Seletor corrigido para aplicar ícones corretamente */
-        .sidebar-content .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel */
-        .sidebar-content .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque */
-        .sidebar-content .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* Adicionar */
-        .sidebar-content .stButton:nth-child(4) > button::before {{ content: '\\f2f5'; }} /* Registrar Uso (Saída) */
-        .sidebar-content .stButton:nth-child(5) > button::before {{ content: '{lista_compras_icon}'; }} /* Compras (Dinâmico) */
-        .sidebar-content .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar */
+        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel */
+        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque */
+        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* Adicionar */
+        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f2f5'; }} /* Registrar Uso */
+        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '{lista_compras_icon}'; }} /* Compras (Dinâmico) */
+        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar */
+        
+        /* Estilo dos Botões da Sidebar */
+        .stButton > button {{
+            border-radius: 8px; border: 1px solid transparent;
+            transition: background-color 0.2s, border-color 0.2s;
+        }}
+        .stButton > button:hover {{ border-color: #4a4a8a; background-color: #162447; }}
+        .stButton > button:focus:not(:hover) {{ border-color: #4a90e2; background-color: #2e2e54; }}
 
         /* Badge de Notificação */
-        .sidebar-content .stButton:nth-child(5) > button > div {{
+        .sidebar-menu .stButton:nth-child(5) > button > div {{
             display: flex; justify-content: space-between; align-items: center; width: 100%;
         }}
-        .sidebar-content .stButton:nth-child(5) > button > div::after {{
+        .sidebar-menu .stButton:nth-child(5) > button > div::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
@@ -91,12 +91,25 @@ def injetar_estilos(num_itens_alerta=0):
         
         /* Rodapé da Sidebar */
         .sidebar-footer {{
-            text-align: center;
-            padding: 1rem;
-            flex-shrink: 0; /* Impede que o rodapé encolha */
+            text-align: center; padding: 1rem; flex-shrink: 0;
+            border-top: 1px solid #2e2e54;
         }}
         .sidebar-footer .brand {{ font-weight: bold; color: #e0e0e0; margin: 0; }}
         .sidebar-footer .version {{ font-size: 0.8em; color: #808080; margin: 0; }}
+
+        /* Novos Cards de Métricas */
+        .metric-card {{
+            background-color: #1c1c2e; border-radius: 10px; padding: 1.5rem;
+            display: flex; align-items: center; border-left: 5px solid;
+            transition: all 0.3s ease-in-out; margin-bottom: 1rem;
+        }}
+        .metric-card:hover {{ transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.2); }}
+        .metric-card-1 {{ border-color: #4a90e2; }} /* Blue */
+        .metric-card-2 {{ border-color: #f5a623; }} /* Orange */
+        .metric-card-3 {{ border-color: #7ed321; }} /* Green */
+        .metric-icon {{ font-size: 2.5em; margin-right: 1rem; opacity: 0.8; }}
+        .metric-text p {{ margin: 0; font-size: 1em; color: #a9a9a9; }}
+        .metric-text h3 {{ margin: 0; font-size: 1.8em; color: #ffffff; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -198,6 +211,9 @@ def gerar_pdf_relatorio(dataframe, titulo):
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, titulo, 0, 1, "C")
     pdf.ln(5)
+    
+    # Adiciona a codificação UTF-8 para suportar caracteres especiais
+    pdf.add_font('Arial', '', 'Arial.ttf', uni=True)
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 10, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, "R")
     pdf.ln(5)
@@ -223,8 +239,9 @@ def gerar_pdf_relatorio(dataframe, titulo):
                 pdf.cell(largura_coluna, 10, str(item), 1, 0, "C")
             pdf.ln()
             
-    # CORREÇÃO: Retorna bytes diretamente, que é o formato esperado pelo Streamlit.
-    return pdf.output()
+    # CORREÇÃO: pdf.output() retorna uma string que precisa ser codificada.
+    # 'latin-1' é uma codificação segura para arquivos binários como PDF.
+    return pdf.output(dest='S').encode('latin-1')
 
 
 # --- PÁGINAS DA APLICAÇÃO ---
@@ -238,9 +255,32 @@ def pagina_painel_principal(lista_compras):
     num_itens_alerta = len(lista_compras)
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Valor Total do Estoque", f"R$ {valor_total:,.2f}")
-    col2.metric("Itens em Alerta", f"{num_itens_alerta}")
-    col3.metric("Total de Itens Únicos", f"{total_itens}")
+    col1.markdown(f"""
+    <div class="metric-card metric-card-1">
+        <i class="fa-solid fa-sack-dollar metric-icon"></i>
+        <div class="metric-text">
+            <p>Valor Total do Estoque</p>
+            <h3>R$ {valor_total:,.2f}</h3>
+        </div>
+    </div>""", unsafe_allow_html=True)
+    
+    col2.markdown(f"""
+    <div class="metric-card metric-card-2">
+        <i class="fa-solid fa-triangle-exclamation metric-icon"></i>
+        <div class="metric-text">
+            <p>Itens em Alerta</p>
+            <h3>{num_itens_alerta}</h3>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    col3.markdown(f"""
+    <div class="metric-card metric-card-3">
+        <i class="fa-solid fa-boxes-stacked metric-icon"></i>
+        <div class="metric-text">
+            <p>Total de Itens Únicos</p>
+            <h3>{total_itens}</h3>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
     st.subheader("Itens Precisando de Reposição Urgente")
     if not lista_compras.empty:
@@ -443,10 +483,14 @@ def main():
     with st.sidebar:
         injetar_estilos(num_itens_alerta)
         
-        st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <div class="sidebar-header">
+                <i class="fa-solid fa-pen-nib main-icon"></i>
+                <h3>Tattoo Studio Estoque</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Agrupa os botões em uma div para garantir que os seletores CSS funcionem
-        st.markdown('<div class="sidebar-content">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
         menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item",
                       "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
         
@@ -456,16 +500,12 @@ def main():
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Rodapé personalizado
-        st.markdown(
-            """
+        st.markdown(f"""
             <div class="sidebar-footer">
                 <p class="brand">Rá Paixão Tattoo</p>
-                <p class="version">Versão 2.3</p>
+                <p class="version">Versão {APP_VERSION}</p>
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+            """, unsafe_allow_html=True)
 
     paginas = {
         "Painel Principal": lambda: pagina_painel_principal(lista_compras_atual),
