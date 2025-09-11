@@ -34,13 +34,16 @@ TIPOS_DADOS_ESTOQUE = {
 
 # --- CSS E COMPONENTES VISUAIS ---
 def injetar_estilos(num_itens_alerta=0):
-    """Injeta o CSS para estilizar a aplicação e o ícone de notificação."""
+    """Injeta o CSS para estilizar a aplicação, incluindo ícones dinâmicos."""
+    # Define o ícone da lista de compras: alerta se houver itens, carrinho caso contrário.
+    lista_compras_icon = '\\f071' if num_itens_alerta > 0 else '\\f07a' # fa-triangle-exclamation ou fa-cart-shopping
+
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     st.markdown(f"""
     <style>
         /* Ajuste para evitar sobreposição do cabeçalho */
         .block-container {{
-            padding-top: 4rem; /* Aumentado de 2rem para 4rem */
+            padding-top: 4rem;
         }}
         .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
@@ -48,35 +51,29 @@ def injetar_estilos(num_itens_alerta=0):
 
         /* Título da Sidebar */
         .sidebar-header {{
-            text-align: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid #2e2e54;
-            margin-bottom: 1rem;
+            text-align: center; padding: 1rem 0;
+            border-bottom: 1px solid #2e2e54; margin-bottom: 1rem;
         }}
-        .sidebar-header h3 {{
-            color: #ffffff;
-            font-weight: bold;
-        }}
+        .sidebar-header h3 {{ color: #ffffff; font-weight: bold; }}
 
         /* Ícones Font Awesome nos botões da sidebar */
         .stButton > button::before {{
             font-family: "Font Awesome 6 Free"; font-weight: 900;
-            margin-right: 12px;
-            font-size: 1.1em;
+            margin-right: 12px; font-size: 1.1em;
         }}
-        /* Ícones específicos para cada botão */
-        [data-testid="stSidebar"] .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel: fa-chart-pie */
-        [data-testid="stSidebar"] .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque: fa-boxes-stacked */
-        [data-testid="stSidebar"] .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* Adicionar: fa-plus-circle */
-        [data-testid="stSidebar"] .stButton:nth-child(4) > button::before {{ content: '\\f160'; }} /* Registrar: fa-arrow-down-short-wide */
-        [data-testid="stSidebar"] .stButton:nth-child(5) > button::before {{ content: '\\f07a'; }} /* Compras: fa-cart-shopping */
-        [data-testid="stSidebar"] .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar: fa-cog */
+        /* Ícones específicos para cada botão (dentro da div .menu-buttons) */
+        .menu-buttons .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel: fa-chart-pie */
+        .menu-buttons .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque: fa-boxes-stacked */
+        .menu-buttons .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* Adicionar: fa-plus-circle */
+        .menu-buttons .stButton:nth-child(4) > button::before {{ content: '\\f160'; }} /* Registrar: fa-arrow-down-short-wide */
+        .menu-buttons .stButton:nth-child(5) > button::before {{ content: '{lista_compras_icon}'; }} /* Ícone dinâmico */
+        .menu-buttons .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar: fa-cog */
 
         /* Badge de Notificação para Lista de Compras */
-        [data-testid="stSidebar"] .stButton:nth-child(5) > button > div {{
+        .menu-buttons .stButton:nth-child(5) > button > div {{
             display: flex; justify-content: space-between; align-items: center; width: 100%;
         }}
-        [data-testid="stSidebar"] .stButton:nth-child(5) > button > div::after {{
+        .menu-buttons .stButton:nth-child(5) > button > div::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
@@ -186,7 +183,7 @@ def gerar_lista_de_compras():
     return pd.DataFrame()
 
 def gerar_pdf_relatorio(dataframe, titulo):
-    """Gera um arquivo PDF a partir de um DataFrame."""
+    """Gera um arquivo PDF em formato de bytes a partir de um DataFrame."""
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
@@ -199,12 +196,11 @@ def gerar_pdf_relatorio(dataframe, titulo):
     if dataframe.empty:
         pdf.set_font("Arial", "I", 12)
         pdf.cell(0, 10, "Nenhum dado para exibir.", 0, 1, "C")
-        return pdf.output()
+        return pdf.output(dest='S').encode('latin-1')
 
     pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(230, 230, 230)
     
-    # Adapta a largura das colunas
     num_colunas = len(dataframe.columns)
     largura_disponivel = pdf.w - 2 * pdf.l_margin
     largura_coluna = largura_disponivel / num_colunas if num_colunas > 0 else 0
@@ -219,8 +215,9 @@ def gerar_pdf_relatorio(dataframe, titulo):
             pdf.cell(largura_coluna, 10, str(item), 1, 0, "C")
         pdf.ln()
         
-    # CORREÇÃO: pdf.output() já retorna bytes, não precisa de .encode()
-    return pdf.output()
+    # CORREÇÃO: streamlit.download_button requer bytes.
+    # pdf.output(dest='S') cria uma string, que precisa ser codificada para bytes.
+    return pdf.output(dest='S').encode('latin-1')
 
 
 # --- PÁGINAS DA APLICAÇÃO ---
@@ -446,12 +443,15 @@ def main():
         menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item",
                       "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
         
+        # Agrupa os botões em uma div para garantir que os seletores CSS funcionem
+        st.markdown('<div class="menu-buttons">', unsafe_allow_html=True)
         for item in menu_items:
             if st.button(item, key=f"btn_{item}", use_container_width=True):
                 st.session_state.pagina_atual = item; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True)
-        st.info("Versão 2.1 - Correções")
+        st.info("Versão 2.2 - Correções")
 
     paginas = {
         "Painel Principal": lambda: pagina_painel_principal(lista_compras_atual),
@@ -467,3 +467,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
