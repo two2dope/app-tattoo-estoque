@@ -176,15 +176,120 @@ def page_dashboard():
 
 def page_my_stock():
     st.title("Meu Estoque")
-    # ... (código da página de estoque)
+    if st.session_state.stock_df.empty:
+        st.info("Seu estoque está vazio.")
+        return
+
+    search_query = st.text_input("Buscar por nome, marca ou tipo...", placeholder="Buscar...")
+    
+    df_display = st.session_state.stock_df.copy()
+    if search_query:
+        df_display = df_display[
+            df_display['Nome do Item'].str.contains(search_query, case=False, na=False) |
+            df_display['Marca/Modelo'].str.contains(search_query, case=False, na=False)
+        ]
+    
+    edited_df = st.data_editor(df_display, hide_index=True, use_container_width=True, key="stock_editor")
+    
+    if st.button("Salvar Alterações"):
+        # Lógica de salvamento robusta
+        # Define o ID como índice para garantir que a atualização seja correta
+        df_original_indexed = st.session_state.stock_df.set_index('ID')
+        edited_df_indexed = pd.DataFrame(edited_df).set_index('ID')
+        
+        # Atualiza o DataFrame original com base nos dados editados
+        df_original_indexed.update(edited_df_indexed)
+        
+        # Restaura o DataFrame para o estado original (sem índice de ID)
+        st.session_state.stock_df = df_original_indexed.reset_index()
+        
+        save_data(client, st.session_state.stock_df)
+        st.success("Alterações salvas com sucesso!")
+        st.rerun()
 
 def page_add_item():
     st.title("Adicionar Novo Item")
-    # ... (código da página de adicionar item)
+    with st.form(key="add_item_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            nome = st.text_input("Nome do Item")
+            tipo = st.text_input("Tipo/Especificação")
+            categorias = get_unique_values("Categoria") + ["Adicionar Nova..."]
+            categoria_sel = st.selectbox("Categoria", categorias)
+            if categoria_sel == "Adicionar Nova...":
+                categoria_sel = st.text_input("Nome da Nova Categoria")
+            qtd = st.number_input("Qtd. em Estoque", min_value=0.0, step=0.1, format="%.2f")
+            unidade = st.selectbox("Unidade de Medida", ["Unidade", "Caixa", "Frasco", "Par", "Rolo"])
+        with c2:
+            marca = st.text_input("Marca/Modelo")
+            sku = st.text_input("Código/SKU (Opcional)")
+            fornecedores = get_unique_values("Fornecedor Principal") + ["Adicionar Novo..."]
+            fornecedor_sel = st.selectbox("Fornecedor Principal", fornecedores)
+            if fornecedor_sel == "Adicionar Novo...":
+                fornecedor_sel = st.text_input("Nome do Novo Fornecedor")
+            minimo = st.number_input("Estoque Mínimo", min_value=0, step=1)
+            custo = st.number_input("Preço de Custo (R$)", min_value=0.0, format="%.2f")
+        
+        observacoes = st.text_area("Observações Adicionais")
+        
+        if st.form_submit_button("Salvar Item"):
+            if not nome or not categoria_sel:
+                st.error("Nome do Item e Categoria são obrigatórios.")
+            else:
+                new_id = (st.session_state.stock_df['ID'].max() + 1) if not st.session_state.stock_df.empty else 1
+                new_item = pd.DataFrame([{
+                    "ID": new_id, "Nome do Item": nome, "Marca/Modelo": marca, "Tipo/Especificação": tipo,
+                    "Categoria": categoria_sel, "Fornecedor Principal": fornecedor_sel, "Quantidade em Estoque": qtd,
+                    "Estoque Mínimo": minimo, "Unidade de Medida": unidade, "Preço de Custo": custo,
+                    "Código/SKU": sku, "Observações": observacoes,
+                    "Data da Última Compra": datetime.now().strftime('%Y-%m-%d')
+                }])
+                st.session_state.stock_df = pd.concat([st.session_state.stock_df, new_item], ignore_index=True)
+                save_data(client, st.session_state.stock_df)
+                st.success(f"Item '{nome}' adicionado com sucesso!")
 
 def page_register_usage():
     st.title("Registrar Uso de Material")
-    # ... (código da página de registrar uso)
+    df = st.session_state.stock_df
+    if df.empty:
+        st.warning("Estoque vazio. Não é possível registrar uso.")
+        return
+    
+    if 'session_items' not in st.session_state:
+        st.session_state.session_items = []
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.subheader("Adicionar Itens Consumidos")
+        item_options = {f"{row['Nome do Item']} ({row.get('Marca/Modelo', '')}) - Estoque: {row['Quantidade em Estoque']}": row['ID'] for index, row in df.iterrows()}
+        selected_item_str = st.selectbox("Buscar item...", [""] + list(item_options.keys()))
+        
+        if selected_item_str:
+            selected_id = item_options[selected_item_str]
+            qty_consumed = st.number_input("Quantidade a ser usada:", min_value=0.1, step=0.1, value=1.0, format="%.2f", key=f"qty_{selected_id}")
+            if st.button("Adicionar à Sessão"):
+                st.session_state.session_items.append({"id": selected_id, "name": selected_item_str.split(' - ')[0], "quantity": qty_consumed})
+                st.rerun()
+
+    with col2:
+        st.subheader("Itens da Sessão")
+        if st.session_state.session_items:
+            for item in st.session_state.session_items:
+                st.write(f"- {item['quantity']}x {item['name']}")
+            if st.button("Confirmar Uso", type="primary", use_container_width=True):
+                for item_to_use in st.session_state.session_items:
+                    item_index = st.session_state.stock_df[st.session_state.stock_df['ID'] == item_to_use['id']].index
+                    if not item_index.empty:
+                        idx = item_index[0]
+                        current_qty = st.session_state.stock_df.loc[idx, 'Quantidade em Estoque']
+                        st.session_state.stock_df.loc[idx, 'Quantidade em Estoque'] = float(current_qty) - float(item_to_use['quantity'])
+                
+                save_data(client, st.session_state.stock_df)
+                st.session_state.session_items = []
+                st.success("Baixa no estoque realizada com sucesso!")
+                st.rerun()
+        else:
+            st.info("Nenhum item adicionado.")
 
 def page_shopping_list():
     st.title("Lista de Compras")
@@ -219,7 +324,6 @@ def page_registrations():
 # NAVEGAÇÃO PRINCIPAL (SIDEBAR)
 # =============================================================================
 
-# Dicionário de páginas com Emojis
 PAGES = {
     "Painel Principal": ("🏠", page_dashboard),
     "Meu Estoque": ("📦", page_my_stock),
@@ -248,7 +352,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.info("Versão 1.2\n\nFeito para estúdios modernos.")
+    st.info("Versão 1.3\n\nFeito para estúdios modernos.")
 
 # Executa a função da página atual
 if client:
