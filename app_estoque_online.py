@@ -18,6 +18,7 @@ CADASTROS_FILE = 'cadastros.json'
 
 # --- CSS E COMPONENTES VISUAIS ---
 def carregar_componentes_visuais(num_itens_alerta=0):
+    # Injeta a folha de estilos do Font Awesome a partir de um CDN
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     
     st.markdown(f"""
