@@ -56,7 +56,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
             border-radius: 8px; border: 1px solid transparent;
         }}
         .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
-        .stButton > button:focus:not(:hover) {{
+        .stButton > button:focus {{
             background-color: #2e2e54; color: white; border: 1px solid #4a4a8a; font-weight: bold;
         }}
 
@@ -289,7 +289,7 @@ def set_page(page): st.session_state.pagina_atual = page
 
 # --- RENDERIZAÇÃO DA INTERFACE ---
 with st.sidebar:
-    st.markdown('<div class="sidebar-header"><span class="sidebar-icon">💀</span><h3>Tattoo Estoque</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-header"><span class="sidebar-icon"><i class="fa-solid fa-skull"></i></span><h3>Tattoo Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
@@ -308,4 +308,5 @@ paginas = {
     "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
 }
 paginas[st.session_state.pagina_atual]()
+
 
