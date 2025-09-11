@@ -24,6 +24,7 @@ def carregar_componentes_visuais(num_itens_alerta=0):
     st.markdown(f"""
     <style>
         /* Ajustes Gerais */
+        iframe {{ display: none; }} /* Oculta o iframe de componentes HTML */
         .block-container {{ padding-top: 3rem; }}
         body, .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
@@ -40,40 +41,22 @@ def carregar_componentes_visuais(num_itens_alerta=0):
         .footer-brand {{ font-size: 0.9em; font-weight: bold; display: block; }}
         .footer-version {{ font-size: 0.8em; color: #666; display: block; }}
         
-        /* Botões do Menu da Sidebar */
-        .stButton > button {{
-            width: 100%; text-align: left !important; border: none; 
-            background-color: transparent; color: #e0e0e0; 
-            padding: 10px 15px;
-            margin-bottom: 4px;
-            font-size: 1.0em;
-            transition: all 0.2s ease-in-out; white-space: nowrap; 
-            overflow: hidden; text-overflow: ellipsis; 
+        /* Menu da Sidebar (HTML) */
+        .nav-item {{
             display: flex; align-items: center; justify-content: space-between;
-            border-radius: 8px;
+            padding: 10px 15px; margin-bottom: 4px; border-radius: 8px;
+            font-size: 1.0em; color: #e0e0e0; text-decoration: none;
+            transition: all 0.2s ease-in-out; cursor: pointer;
         }}
-        .stButton > button:hover {{ background-color: #162447; color: #ffffff; }}
-        
-        /* Ícones do Font Awesome via Pseudo-elementos */
-        .stButton > button::before {{
-            font-family: "Font Awesome 6 Free";
-            font-weight: 900;
-            margin-right: 12px;
-            font-size: 0.9em;
-        }}
-        .sidebar-menu .stButton:nth-child(1) > button::before {{ content: '\\f080'; }} /* fa-chart-simple */
-        .sidebar-menu .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }} /* fa-box-archive */
-        .sidebar-menu .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}   /* fa-plus */
-        .sidebar-menu .stButton:nth-child(4) > button::before {{ content: '\\f304'; }} /* fa-pen */
-        .sidebar-menu .stButton:nth-child(5) > button::before {{ content: '\\f290'; }} /* fa-cart-shopping */
-        .sidebar-menu .stButton:nth-child(6) > button::before {{ content: '\\f085'; }} /* fa-cogs */
+        .nav-item:hover {{ background-color: #162447; color: #ffffff; }}
+        .nav-item.active {{ background-color: #2e2e54; color: white; font-weight: bold; }}
+        .nav-item .icon {{ margin-right: 12px; font-size: 0.9em; width: 20px; text-align: center;}}
+        .nav-item .text {{ flex-grow: 1; }}
 
         /* Badge de Notificação */
-        .sidebar-menu .stButton:nth-child(5) > button::after {{
-            content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
+        .badge {{
             background-color: #e53935; color: white; padding: 2px 8px;
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
-            display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
 
         /* Painel Principal: Cards */
@@ -179,7 +162,7 @@ def pagina_painel_principal():
     else: st.success("🎉 Nenhum item precisa de reposição no momento!")
 
 def pagina_meu_estoque():
-    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=set_page, args=("Adicionar Item",), use_container_width=True, type="primary")
+    c1, c2 = st.columns([3, 1]); c1.header("Meu Estoque"); c2.button("Adicionar Novo Item", on_click=lambda: st.query_params.update(page="Adicionar_Item"), use_container_width=True, type="primary")
     with st.expander("Configurar Colunas Visíveis"):
         todas_colunas = [c for c in st.session_state.estoque_df.columns if c not in ['ID']]
         colunas_selecionadas = st.multiselect("Selecione as colunas:", options=todas_colunas, default=st.session_state.get('colunas_visiveis', todas_colunas))
@@ -274,24 +257,33 @@ def pagina_gerenciar_cadastros():
             if st.button("Excluir Fornecedor"): st.session_state.fornecedores.remove(sel); salvar_dados(); st.rerun()
 
 # --- INICIALIZAÇÃO E ROTEAMENTO ---
-if 'pagina_atual' not in st.session_state:
+if 'estoque_df' not in st.session_state:
     carregar_dados()
-    st.session_state.pagina_atual = 'Painel Principal'
     st.session_state.sessao_uso = []
-def set_page(page): st.session_state.pagina_atual = page
 
 # --- RENDERIZAÇÃO DA INTERFACE ---
+query_params = st.query_params.to_dict()
+pagina_atual = query_params.get("page", ["Painel Principal"])[0].replace("_", " ")
+
 with st.sidebar:
     st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    
     num_itens_comprar = len(gerar_lista_de_compras()) if gerar_lista_de_compras() is not None else 0
     carregar_componentes_visuais(num_itens_comprar)
     
-    menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item", "Registrar Uso", "Lista de Compras", "Gerenciar Cadastros"]
-    
-    for item in menu_items:
-        st.button(item, on_click=set_page, args=(item,), key=f"btn_{item}", use_container_width=True)
-    
+    menu_items = {
+        "Painel Principal": "fa-solid fa-chart-simple", "Meu Estoque": "fa-solid fa-box-archive",
+        "Adicionar Item": "fa-solid fa-plus", "Registrar Uso": "fa-solid fa-pen",
+        "Lista de Compras": "fa-solid fa-cart-shopping", "Gerenciar Cadastros": "fa-solid fa-cogs"
+    }
+
+    for page_name, icon_class in menu_items.items():
+        is_active = "active" if pagina_atual == page_name else ""
+        badge_html = f"<span class='badge'>{num_itens_comprar}</span>" if "Lista de Compras" in page_name and num_itens_comprar > 0 else ""
+        page_link = page_name.replace(" ", "_")
+        st.markdown(f'<a href="?page={page_link}" class="nav-item {is_active}" target="_self"><i class="{icon_class} icon"></i><span class="text">{page_name}</span>{badge_html}</a>', unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-footer"><span class="footer-brand">Rá Paixão Tattoo</span><span class="footer-version">Versão 15.0 Final</span></div>', unsafe_allow_html=True)
 
@@ -300,5 +292,9 @@ paginas = {
     "Adicionar Item": pagina_adicionar_item, "Registrar Uso": pagina_registrar_uso,
     "Lista de Compras": pagina_lista_compras, "Gerenciar Cadastros": pagina_gerenciar_cadastros
 }
-paginas[st.session_state.pagina_atual]()
+if pagina_atual in paginas:
+    paginas[pagina_atual]()
+else:
+    # Página padrão caso o parâmetro da URL seja inválido
+    paginas["Painel Principal"]()
 
