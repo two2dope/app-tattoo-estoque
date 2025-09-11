@@ -38,27 +38,43 @@ def injetar_estilos(num_itens_alerta=0):
     st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">', unsafe_allow_html=True)
     st.markdown(f"""
     <style>
-        /* Ajustes Gerais */
-        .block-container {{ padding-top: 2rem; }}
+        /* Ajuste para evitar sobreposição do cabeçalho */
+        .block-container {{
+            padding-top: 4rem; /* Aumentado de 2rem para 4rem */
+        }}
         .stApp {{ background-color: #0f0f1a; color: #e0e0e0; }}
         h1, h2, h3, h4 {{ color: #e0e0e0; }}
         [data-testid="stSidebar"] {{ background-color: #1a1a2e; }}
+
+        /* Título da Sidebar */
+        .sidebar-header {{
+            text-align: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #2e2e54;
+            margin-bottom: 1rem;
+        }}
+        .sidebar-header h3 {{
+            color: #ffffff;
+            font-weight: bold;
+        }}
 
         /* Ícones Font Awesome nos botões da sidebar */
         .stButton > button::before {{
             font-family: "Font Awesome 6 Free"; font-weight: 900;
             margin-right: 12px;
+            font-size: 1.1em;
         }}
-        [data-testid="stSidebar"] .stButton:nth-child(1) > button::before {{ content: '\\f080'; }} /* Painel Principal */
-        [data-testid="stSidebar"] .stButton:nth-child(2) > button::before {{ content: '\\f49e'; }} /* Meu Estoque */
-        [data-testid="stSidebar"] .stButton:nth-child(3) > button::before {{ content: '\\2b'; }}   /* Adicionar Item */
-        [data-testid="stSidebar"] .stButton:nth-child(4) > button::before {{ content: '\\f304'; }} /* Registrar Uso */
-        [data-testid="stSidebar"] .stButton:nth-child(5) > button::before {{ content: '\\f290'; }} /* Lista de Compras */
-        [data-testid="stSidebar"] .stButton:nth-child(6) > button::before {{ content: '\\f085'; }} /* Gerenciar */
+        /* Ícones específicos para cada botão */
+        [data-testid="stSidebar"] .stButton:nth-child(1) > button::before {{ content: '\\f200'; }} /* Painel: fa-chart-pie */
+        [data-testid="stSidebar"] .stButton:nth-child(2) > button::before {{ content: '\\f468'; }} /* Estoque: fa-boxes-stacked */
+        [data-testid="stSidebar"] .stButton:nth-child(3) > button::before {{ content: '\\f055'; }} /* Adicionar: fa-plus-circle */
+        [data-testid="stSidebar"] .stButton:nth-child(4) > button::before {{ content: '\\f160'; }} /* Registrar: fa-arrow-down-short-wide */
+        [data-testid="stSidebar"] .stButton:nth-child(5) > button::before {{ content: '\\f07a'; }} /* Compras: fa-cart-shopping */
+        [data-testid="stSidebar"] .stButton:nth-child(6) > button::before {{ content: '\\f013'; }} /* Gerenciar: fa-cog */
 
         /* Badge de Notificação para Lista de Compras */
         [data-testid="stSidebar"] .stButton:nth-child(5) > button > div {{
-            display: flex; justify-content: space-between; width: 100%;
+            display: flex; justify-content: space-between; align-items: center; width: 100%;
         }}
         [data-testid="stSidebar"] .stButton:nth-child(5) > button > div::after {{
             content: '{num_itens_alerta if num_itens_alerta > 0 else ""}';
@@ -66,7 +82,15 @@ def injetar_estilos(num_itens_alerta=0):
             border-radius: 12px; font-size: 0.8em; font-weight: bold;
             display: { 'inline-block' if num_itens_alerta > 0 else 'none' };
         }}
-        /* Outros estilos ... (mantidos do original para brevidade) */
+        
+        /* Melhoria nos cards do painel */
+        .metric-card {{
+            background-color: #1a1a2e; padding: 20px; border-radius: 10px;
+            border-left: 5px solid #4a4a8a; margin-bottom: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }}
+        .metric-card p {{ margin-bottom: 0.5rem; }}
+        .metric-card h3 {{ margin-top: 0; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -153,7 +177,7 @@ def gerar_lista_de_compras():
     """Gera um DataFrame com itens que estão abaixo do estoque mínimo."""
     df = st.session_state.estoque_df
     if 'Quantidade em Estoque' not in df.columns or 'Estoque Mínimo' not in df.columns:
-        return pd.DataFrame() # Retorna DF vazio se colunas essenciais não existirem
+        return pd.DataFrame() 
     
     lista = df[df['Quantidade em Estoque'] <= df['Estoque Mínimo']].copy()
     if not lista.empty:
@@ -175,28 +199,33 @@ def gerar_pdf_relatorio(dataframe, titulo):
     if dataframe.empty:
         pdf.set_font("Arial", "I", 12)
         pdf.cell(0, 10, "Nenhum dado para exibir.", 0, 1, "C")
-        return bytes(pdf.output(dest='S').encode('latin-1'))
+        return pdf.output()
 
     pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(230, 230, 230)
-    col_width = (pdf.w - 2 * pdf.l_margin) / len(dataframe.columns)
+    
+    # Adapta a largura das colunas
+    num_colunas = len(dataframe.columns)
+    largura_disponivel = pdf.w - 2 * pdf.l_margin
+    largura_coluna = largura_disponivel / num_colunas if num_colunas > 0 else 0
     
     for header in dataframe.columns:
-        pdf.cell(col_width, 10, str(header), 1, 0, "C", fill=True)
+        pdf.cell(largura_coluna, 10, str(header), 1, 0, "C", fill=True)
     pdf.ln()
     
     pdf.set_font("Arial", "", 8)
     for _, row in dataframe.iterrows():
         for item in row:
-            pdf.cell(col_width, 10, str(item), 1, 0, "C")
+            pdf.cell(largura_coluna, 10, str(item), 1, 0, "C")
         pdf.ln()
         
-    return bytes(pdf.output(dest='S').encode('latin-1'))
+    # CORREÇÃO: pdf.output() já retorna bytes, não precisa de .encode()
+    return pdf.output()
 
 
 # --- PÁGINAS DA APLICAÇÃO ---
 def pagina_painel_principal(lista_compras):
-    st.markdown("<h3><i class='fa-solid fa-chart-simple'></i> Painel Principal</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-chart-pie'></i> Painel Principal</h3>", unsafe_allow_html=True)
     st.write("Resumo geral do seu inventário.")
 
     df = st.session_state.estoque_df
@@ -205,9 +234,12 @@ def pagina_painel_principal(lista_compras):
     num_itens_alerta = len(lista_compras)
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Valor Total do Estoque", f"R$ {valor_total:,.2f}")
-    col2.metric("Itens em Alerta", f"{num_itens_alerta}")
-    col3.metric("Total de Itens Únicos", f"{total_itens}")
+    with col1:
+        st.markdown(f'<div class="metric-card"><p>Valor Total do Estoque</p><h3>R$ {valor_total:,.2f}</h3></div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'<div class="metric-card"><p>Itens em Alerta</p><h3>{num_itens_alerta}</h3></div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'<div class="metric-card"><p>Total de Itens Únicos</p><h3>{total_itens}</h3></div>', unsafe_allow_html=True)
 
     st.subheader("Itens Precisando de Reposição Urgente")
     if not lista_compras.empty:
@@ -217,7 +249,7 @@ def pagina_painel_principal(lista_compras):
 
 def pagina_meu_estoque():
     c1, c2 = st.columns([3, 1])
-    c1.markdown("<h3><i class='fa-solid fa-box-archive'></i> Meu Estoque</h3>", unsafe_allow_html=True)
+    c1.markdown("<h3><i class='fa-solid fa-boxes-stacked'></i> Meu Estoque</h3>", unsafe_allow_html=True)
     if c2.button("Adicionar Novo Item", use_container_width=True, type="primary"):
         st.session_state.pagina_atual = "Adicionar Item"
         st.rerun()
@@ -242,9 +274,7 @@ def pagina_meu_estoque():
     
     df_modificado = st.data_editor(
         df_para_editar[colunas_editor],
-        use_container_width=True,
-        hide_index=True,
-        key="data_editor_estoque",
+        use_container_width=True, hide_index=True, key="data_editor_estoque",
         column_config={
             "ID": st.column_config.NumberColumn(disabled=True),
             "Quantidade em Estoque": st.column_config.NumberColumn(format="%.2f", required=True),
@@ -258,15 +288,12 @@ def pagina_meu_estoque():
     c1, c2 = st.columns([3, 1])
     if c1.button("Salvar Alterações", use_container_width=True, type="primary"):
         ids_para_excluir = df_modificado[df_modificado["Excluir"]]["ID"].tolist()
-        df_alterado = df_modificado.drop(columns=["Excluir"])
+        df_alterado = df_modificado.drop(columns=["Excluir"]).set_index('ID')
         
-        # Atualiza o DataFrame principal com as alterações
         df_atualizado = df_original.copy().set_index('ID')
-        df_alterado = df_alterado.set_index('ID')
         df_atualizado.update(df_alterado)
         df_atualizado = df_atualizado.reset_index()
 
-        # Remove os itens marcados para exclusão
         if ids_para_excluir:
             df_atualizado = df_atualizado[~df_atualizado['ID'].isin(ids_para_excluir)]
         
@@ -278,15 +305,13 @@ def pagina_meu_estoque():
     if not st.session_state.estoque_df.empty:
         pdf_data = gerar_pdf_relatorio(st.session_state.estoque_df.drop(columns=['ID']), "Relatório de Estoque Completo")
         c2.download_button(
-            label="Baixar Relatório PDF",
-            data=pdf_data,
-            file_name=f"relatorio_estoque_{date.today()}.pdf",
-            mime="application/pdf",
+            label="Baixar Relatório PDF", data=pdf_data,
+            file_name=f"relatorio_estoque_{date.today()}.pdf", mime="application/pdf",
             use_container_width=True
         )
 
 def pagina_adicionar_item():
-    st.markdown("<h3><i class='fa-solid fa-plus'></i> Adicionar Novo Item</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-plus-circle'></i> Adicionar Novo Item</h3>", unsafe_allow_html=True)
     with st.form("novo_item_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome do Item*", help="Campo obrigatório")
@@ -311,7 +336,7 @@ def pagina_adicionar_item():
                 st.success(f"✅ Item '{nome}' adicionado com sucesso!")
 
 def pagina_registrar_uso():
-    st.markdown("<h3><i class='fa-solid fa-pen'></i> Registrar Uso de Material</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-arrow-down-short-wide'></i> Registrar Uso de Material</h3>", unsafe_allow_html=True)
     if 'sessao_uso' not in st.session_state:
         st.session_state.sessao_uso = []
 
@@ -329,18 +354,14 @@ def pagina_registrar_uso():
                 
                 if st.button("Adicionar à Sessão"):
                     item_info = df[df['ID'] == item_id].iloc[0]
-                    st.session_state.sessao_uso.append({
-                        'id': item_id,
-                        'nome': f"{item_info['Nome do Item']} ({item_info['Marca/Modelo']})",
-                        'qtd': quantidade_usada
-                    })
+                    st.session_state.sessao_uso.append({'id': item_id, 'nome': f"{item_info['Nome do Item']} ({item_info['Marca/Modelo']})", 'qtd': quantidade_usada})
                     st.rerun()
     with c2:
         st.subheader("Itens da Sessão Atual")
         if not st.session_state.sessao_uso:
             st.info("Nenhum item adicionado à sessão de uso.")
         else:
-            for i, item in enumerate(st.session_state.sessao_uso):
+            for item in st.session_state.sessao_uso:
                 st.markdown(f"- **{item['qtd']}x** {item['nome']}")
             
             c1_uso, c2_uso = st.columns(2)
@@ -348,7 +369,7 @@ def pagina_registrar_uso():
                 for item in st.session_state.sessao_uso:
                     registrar_uso(item['id'], item['qtd'])
                 st.session_state.sessao_uso = []
-                st.toast('Baixa de estoque confirmada com sucesso!', icon='✅')
+                st.toast('Baixa de estoque confirmada!', icon='✅')
                 st.rerun()
             if c2_uso.button("Limpar Sessão", use_container_width=True):
                 st.session_state.sessao_uso = []
@@ -362,17 +383,15 @@ def pagina_lista_compras(lista_compras):
         st.dataframe(lista_compras, use_container_width=True, hide_index=True)
         pdf_data = gerar_pdf_relatorio(lista_compras, "Lista de Compras")
         st.download_button(
-            label="Baixar Lista em PDF",
-            data=pdf_data,
-            file_name=f"lista_compras_{date.today()}.pdf",
-            mime="application/pdf",
+            label="Baixar Lista em PDF", data=pdf_data,
+            file_name=f"lista_compras_{date.today()}.pdf", mime="application/pdf",
             use_container_width=True
         )
     else:
         st.success("🎉 Sua lista de compras está vazia! Tudo em ordem no estoque.")
 
 def pagina_gerenciar_cadastros():
-    st.markdown("<h3><i class='fa-solid fa-cogs'></i> Gerenciar Cadastros</h3>", unsafe_allow_html=True)
+    st.markdown("<h3><i class='fa-solid fa-cog'></i> Gerenciar Cadastros</h3>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
 
     with c1:
@@ -380,11 +399,8 @@ def pagina_gerenciar_cadastros():
         nova_categoria = st.text_input("Adicionar Nova Categoria", key="nova_cat_input")
         if st.button("Adicionar Categoria"):
             if nova_categoria and nova_categoria not in st.session_state.categorias:
-                st.session_state.categorias.append(nova_categoria)
-                salvar_dados()
-                st.rerun()
-            else:
-                st.error("Nome de categoria inválido ou já existente.")
+                st.session_state.categorias.append(nova_categoria); salvar_dados(); st.rerun()
+            else: st.error("Nome de categoria inválido ou já existente.")
 
         if st.session_state.categorias:
             cat_para_excluir = st.selectbox("Excluir Categoria", options=[""] + st.session_state.categorias, key="del_cat_select")
@@ -392,20 +408,15 @@ def pagina_gerenciar_cadastros():
                 if cat_para_excluir in st.session_state.estoque_df['Categoria'].unique():
                     st.error(f"A categoria '{cat_para_excluir}' está em uso e não pode ser excluída.")
                 elif cat_para_excluir:
-                    st.session_state.categorias.remove(cat_para_excluir)
-                    salvar_dados()
-                    st.rerun()
+                    st.session_state.categorias.remove(cat_para_excluir); salvar_dados(); st.rerun()
 
     with c2:
         st.subheader("Gerenciar Fornecedores")
         novo_fornecedor = st.text_input("Adicionar Novo Fornecedor", key="novo_forn_input")
         if st.button("Adicionar Fornecedor"):
             if novo_fornecedor and novo_fornecedor not in st.session_state.fornecedores:
-                st.session_state.fornecedores.append(novo_fornecedor)
-                salvar_dados()
-                st.rerun()
-            else:
-                st.error("Nome de fornecedor inválido ou já existente.")
+                st.session_state.fornecedores.append(novo_fornecedor); salvar_dados(); st.rerun()
+            else: st.error("Nome de fornecedor inválido ou já existente.")
 
         if st.session_state.fornecedores:
             forn_para_excluir = st.selectbox("Excluir Fornecedor", options=[""] + st.session_state.fornecedores, key="del_forn_select")
@@ -413,28 +424,23 @@ def pagina_gerenciar_cadastros():
                 if forn_para_excluir in st.session_state.estoque_df['Fornecedor Principal'].unique():
                     st.error(f"O fornecedor '{forn_para_excluir}' está em uso e não pode ser excluído.")
                 elif forn_para_excluir:
-                    st.session_state.fornecedores.remove(forn_para_excluir)
-                    salvar_dados()
-                    st.rerun()
+                    st.session_state.fornecedores.remove(forn_para_excluir); salvar_dados(); st.rerun()
 
 
 # --- INICIALIZAÇÃO E CONTROLE DE FLUXO ---
 def main():
     """Função principal que inicializa o estado e renderiza a página correta."""
-    # Inicializa o estado da sessão na primeira execução
     if 'app_inicializado' not in st.session_state:
         carregar_dados()
         st.session_state.pagina_atual = 'Painel Principal'
         st.session_state.sessao_uso = []
         st.session_state.app_inicializado = True
 
-    # Otimização: Calcula a lista de compras uma vez por execução
     lista_compras_atual = gerar_lista_de_compras()
     num_itens_alerta = len(lista_compras_atual)
 
-    # Renderiza a sidebar
     with st.sidebar:
-        st.markdown('<h3>Tattoo Studio Estoque</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-header"><h3>Tattoo Studio Estoque</h3></div>', unsafe_allow_html=True)
         injetar_estilos(num_itens_alerta)
         
         menu_items = ["Painel Principal", "Meu Estoque", "Adicionar Item",
@@ -442,31 +448,21 @@ def main():
         
         for item in menu_items:
             if st.button(item, key=f"btn_{item}", use_container_width=True):
-                st.session_state.pagina_atual = item
-                st.rerun()
+                st.session_state.pagina_atual = item; st.rerun()
         
-        st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True) # Espaçador
-        st.info("Versão 2.0 Refatorada")
+        st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True)
+        st.info("Versão 2.1 - Correções")
 
-
-    # Dicionário de páginas para navegação
     paginas = {
         "Painel Principal": lambda: pagina_painel_principal(lista_compras_atual),
-        "Meu Estoque": pagina_meu_estoque,
-        "Adicionar Item": pagina_adicionar_item,
+        "Meu Estoque": pagina_meu_estoque, "Adicionar Item": pagina_adicionar_item,
         "Registrar Uso": pagina_registrar_uso,
         "Lista de Compras": lambda: pagina_lista_compras(lista_compras_atual),
         "Gerenciar Cadastros": pagina_gerenciar_cadastros
     }
 
-    # Executa a função da página atual
-    pagina_a_renderizar = paginas.get(st.session_state.pagina_atual)
-    if pagina_a_renderizar:
-        pagina_a_renderizar()
-    else:
-        st.error("Página não encontrada.")
-        st.session_state.pagina_atual = "Painel Principal"
-        st.rerun()
+    pagina_a_renderizar = paginas.get(st.session_state.pagina_atual, paginas["Painel Principal"])
+    pagina_a_renderizar()
 
 
 if __name__ == "__main__":
